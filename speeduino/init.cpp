@@ -2314,6 +2314,8 @@ void setPinMapping(byte boardID)
       pinInjector5 = 10; //CS for MC33810 2
       pinInjector6 = 10; //CS for MC33810 3
 
+      
+
       //Dummy pins, without these pin 0 (Serial1 RX) gets overwritten
       pinCoil1 = 35;
       pinCoil2 = 35;
@@ -2355,11 +2357,16 @@ void setPinMapping(byte boardID)
       pinWMIEnabled = pinSpareLOut1; //Spare output
 
       //CS pin number is now set in a compile flag. 
-      // #ifdef USE_SPI_EEPROM
-      //   pinSPIFlash_CS = 6;
-      // #endif
+      #ifdef USE_SPI_EEPROM
+        pinSPIFlash_CS = 6;
+        //pinMC33814_CS = 2;
+      #endif
 
-      #if defined(CORE_TEENSY35)
+      #ifdef USE_MC33814_IGNITION
+        pinMC33814_CS = 2;
+      #endif
+
+      #if defined(CORE_TEENSY41)
         pinTPS = A3; //TPS input pin
         pinIAT = A0; //IAT sensor pin
         pinCLT = A1; //CLS sensor pin
