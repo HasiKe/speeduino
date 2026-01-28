@@ -2311,8 +2311,8 @@ void setPinMapping(byte boardID)
       pinInjector2 = 11; //MOSI
       pinInjector3 = 12; //MISO
       pinInjector4 = 10; //CS for MC33810 1
-      pinInjector5 = 10; //CS for MC33810 2
-      pinInjector6 = 10; //CS for MC33810 3
+      //pinInjector5 = 10; //CS for MC33810 2
+      //pinInjector6 = 10; //CS for MC33810 3
 
       
 
@@ -2334,7 +2334,7 @@ void setPinMapping(byte boardID)
       pinBaro = A4; //Baro sensor pin
       pinBat = A15; //Battery reference voltage pin
       pinSpareTemp1 = A16; //spare Analog input 1
-      pinLaunch = A36; //Can be overwritten below
+      pinLaunch = 36; //Can be overwritten below
       pinTachOut = 5; //Tacho output pin
       pinIdle1 = 27; //Single wire idle control
       pinIdle2 = 29; //2 wire idle control. Shared with Spare 1 output
