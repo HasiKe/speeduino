@@ -79,26 +79,54 @@ static inline uint16_t applyFuelTrimToPW(trimTable3d *pTrimTable, uint16_t fuelL
     return percentageApprox(pw1percent, currentPW);
 }
 
-/** Lookup the current VE value from the primary 3D fuel map.
+/** Get pointer to currently active fuel table based on currentMapSet.
+ * @return Pointer to the active fuel table (1-4)
+ */
+static inline table3d16RpmLoad* getActiveFuelTable(void)
+{
+  switch(currentMapSet)
+  {
+    case 1:  return &fuelTable2;
+    case 2:  return &fuelTable3;
+    case 3:  return &fuelTable4;
+    default: return &fuelTable;  // 0 or invalid = Map 1
+  }
+}
+
+/** Get pointer to currently active ignition table based on currentMapSet.
+ * @return Pointer to the active ignition table (1-4)
+ */
+static inline table3d16RpmLoad* getActiveIgnitionTable(void)
+{
+  switch(currentMapSet)
+  {
+    case 1:  return &ignitionTable2;
+    case 2:  return &ignitionTable3;
+    case 3:  return &ignitionTable4;
+    default: return &ignitionTable;  // 0 or invalid = Map 1
+  }
+}
+
+/** Lookup the current VE value from the active 3D fuel map (selected by currentMapSet).
  * The Y axis value used for this lookup varies based on the fuel algorithm selected (speed density, alpha-n etc).
- * 
+ *
  * @return byte The current VE value
  */
 static inline uint8_t getVE1(void)
 {
   currentStatus.fuelLoad = getLoad(configPage2.fuelAlgorithm, currentStatus);
-  return get3DTableValue(&fuelTable, currentStatus.fuelLoad, currentStatus.RPM); //Perform lookup into fuel map for RPM vs MAP value
+  return get3DTableValue(getActiveFuelTable(), currentStatus.fuelLoad, currentStatus.RPM); //Perform lookup into fuel map for RPM vs MAP value
 }
 
-/** Lookup the ignition advance from 3D ignition table.
+/** Lookup the ignition advance from active 3D ignition table (selected by currentMapSet).
  * The values used to look this up will be RPM and whatever load source the user has configured.
- * 
+ *
  * @return byte The current target advance value in degrees
  */
 static inline int8_t getAdvance1(void)
 {
   currentStatus.ignLoad = getLoad(configPage2.ignAlgorithm, currentStatus);
-  return correctionsIgn((int16_t)get3DTableValue(&ignitionTable, currentStatus.ignLoad, currentStatus.RPM) - INT16_C(OFFSET_IGNITION)); //As above, but for ignition advance
+  return correctionsIgn((int16_t)get3DTableValue(getActiveIgnitionTable(), currentStatus.ignLoad, currentStatus.RPM) - INT16_C(OFFSET_IGNITION)); //As above, but for ignition advance
 }
 
 static inline void setFuelSchedule(FuelSchedule &schedule, uint8_t channel, uint16_t pw, uint16_t startAngle, uint16_t crankAngle, byte fuelChannelsOn)

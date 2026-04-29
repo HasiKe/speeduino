@@ -90,6 +90,11 @@ constexpr uint16_t EEPROM_CONFIG8_MAP8   = 3151;
 //Page 15 added after OUT OF ORDER page 8
 constexpr uint16_t EEPROM_CONFIG15_MAP   = 3199;
 constexpr uint16_t EEPROM_CONFIG15_START = 3281;
+//Multi-map pages 16-19 (fuelTable3/4, ignitionTable3/4) - each 16x16 table ~288 bytes
+constexpr uint16_t EEPROM_CONFIG16_MAP   = 3500;  // fuelTable3
+constexpr uint16_t EEPROM_CONFIG17_MAP   = 3800;  // ignitionTable3
+constexpr uint16_t EEPROM_CONFIG18_MAP   = 4100;  // fuelTable4
+constexpr uint16_t EEPROM_CONFIG19_MAP   = 4400;  // ignitionTable4
 
 #if defined(UNIT_TEST)
 uint16_t MAX_PAGE_ADDRESS = EEPROM_LAST_BARO-sizeof(uint8_t);
@@ -133,6 +138,11 @@ TESTABLE_STATIC uint16_t getEntityStartAddress(page_iterator_t iter) {
     { &ignitionTable2, EEPROM_CONFIG14_MAP },
     { &boostTableLookupDuty, EEPROM_CONFIG15_MAP },
     { &configPage15, EEPROM_CONFIG15_START },
+    // Multi-map tables
+    { &fuelTable3, EEPROM_CONFIG16_MAP },
+    { &ignitionTable3, EEPROM_CONFIG17_MAP },
+    { &fuelTable4, EEPROM_CONFIG18_MAP },
+    { &ignitionTable4, EEPROM_CONFIG19_MAP },
   };
   static const constexpr entity_storage_map_t* entityMapEnd = entityMap + _countof(entityMap);
 
@@ -365,6 +375,38 @@ void savePage(uint8_t pageNum)
       writesRemaining = write_range((byte *)&configPage15, (byte *)&configPage15+sizeof(configPage15), EEPROM_CONFIG15_START, writesRemaining);
       break;
 
+    case fuelMap3Page:
+      /*---------------------------------------------------
+      | Fuel table 3 (Multi-map) - Page 16
+      | 16x16 table itself + the 16 values along each of the axis
+      -----------------------------------------------------*/
+      writesRemaining = writeTable(&fuelTable3, decltype(fuelTable3)::type_key, EEPROM_CONFIG16_MAP, writesRemaining);
+      break;
+
+    case ignMap3Page:
+      /*---------------------------------------------------
+      | Ignition table 3 (Multi-map) - Page 17
+      | 16x16 table itself + the 16 values along each of the axis
+      -----------------------------------------------------*/
+      writesRemaining = writeTable(&ignitionTable3, decltype(ignitionTable3)::type_key, EEPROM_CONFIG17_MAP, writesRemaining);
+      break;
+
+    case fuelMap4Page:
+      /*---------------------------------------------------
+      | Fuel table 4 (Multi-map) - Page 18
+      | 16x16 table itself + the 16 values along each of the axis
+      -----------------------------------------------------*/
+      writesRemaining = writeTable(&fuelTable4, decltype(fuelTable4)::type_key, EEPROM_CONFIG18_MAP, writesRemaining);
+      break;
+
+    case ignMap4Page:
+      /*---------------------------------------------------
+      | Ignition table 4 (Multi-map) - Page 19
+      | 16x16 table itself + the 16 values along each of the axis
+      -----------------------------------------------------*/
+      writesRemaining = writeTable(&ignitionTable4, decltype(ignitionTable4)::type_key, EEPROM_CONFIG19_MAP, writesRemaining);
+      break;
+
     default:
       break;
   }
@@ -485,7 +527,14 @@ void loadAllPages(void)
   //*********************************************************************************************************************************************************************************
   //CONFIG PAGE (15) + boost duty lookup table (LUT)
   (void)loadTable(&boostTableLookupDuty, decltype(boostTableLookupDuty)::type_key, EEPROM_CONFIG15_MAP);
-  (void)load_range(EEPROM_CONFIG15_START, (byte *)&configPage15, (byte *)&configPage15+sizeof(configPage15));  
+  (void)load_range(EEPROM_CONFIG15_START, (byte *)&configPage15, (byte *)&configPage15+sizeof(configPage15));
+
+  //*********************************************************************************************************************************************************************************
+  // Multi-map tables (fuelTable3/4, ignitionTable3/4)
+  (void)loadTable(&fuelTable3, decltype(fuelTable3)::type_key, EEPROM_CONFIG16_MAP);
+  (void)loadTable(&ignitionTable3, decltype(ignitionTable3)::type_key, EEPROM_CONFIG17_MAP);
+  (void)loadTable(&fuelTable4, decltype(fuelTable4)::type_key, EEPROM_CONFIG18_MAP);
+  (void)loadTable(&ignitionTable4, decltype(ignitionTable4)::type_key, EEPROM_CONFIG19_MAP);
 
   //*********************************************************************************************************************************************************************************
 }

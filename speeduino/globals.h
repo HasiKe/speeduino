@@ -115,8 +115,18 @@ static_assert(TOOTH_LOG_SIZE<UINT8_MAX, "Check all uses of TOOTH_LOG_SIZE");
 
 extern struct table3d16RpmLoad fuelTable; //16x16 fuel map
 extern struct table3d16RpmLoad fuelTable2; //16x16 fuel map
+extern struct table3d16RpmLoad fuelTable3; //16x16 fuel map 3 (multi-map)
+extern struct table3d16RpmLoad fuelTable4; //16x16 fuel map 4 (multi-map)
 extern struct table3d16RpmLoad ignitionTable; //16x16 ignition map
 extern struct table3d16RpmLoad ignitionTable2; //16x16 ignition map
+extern struct table3d16RpmLoad ignitionTable3; //16x16 ignition map 3 (multi-map)
+extern struct table3d16RpmLoad ignitionTable4; //16x16 ignition map 4 (multi-map)
+
+/// Multi-map switching: 0=Map1, 1=Map2, 2=Map3, 3=Map4
+#define MAX_MAP_SETS 4
+extern volatile uint8_t currentMapSet;
+uint8_t setMapSet(uint8_t mapSet);  ///< Set active map (0-3), returns clamped value
+uint8_t getMapSet(void);            ///< Get current active map (0-3)
 extern struct table3d16RpmLoad afrTable; //16x16 afr target map
 extern struct table3d8RpmLoad stagingTable; //8x8 fuel staging table
 extern struct table3d8RpmLoad boostTable; //8x8 boost map

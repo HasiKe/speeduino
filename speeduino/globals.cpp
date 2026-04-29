@@ -5,8 +5,34 @@
 
 struct table3d16RpmLoad fuelTable; ///< 16x16 fuel map
 struct table3d16RpmLoad fuelTable2; ///< 16x16 fuel map
+struct table3d16RpmLoad fuelTable3; ///< 16x16 fuel map 3 (multi-map)
+struct table3d16RpmLoad fuelTable4; ///< 16x16 fuel map 4 (multi-map)
 struct table3d16RpmLoad ignitionTable; ///< 16x16 ignition map
 struct table3d16RpmLoad ignitionTable2; ///< 16x16 ignition map
+struct table3d16RpmLoad ignitionTable3; ///< 16x16 ignition map 3 (multi-map)
+struct table3d16RpmLoad ignitionTable4; ///< 16x16 ignition map 4 (multi-map)
+
+/// Multi-map switching: 0=Map1, 1=Map2, 2=Map3, 3=Map4
+volatile uint8_t currentMapSet = 0;
+
+/** Set the active map set (0-3).
+ * @param mapSet The map set to activate (0=Map1, 1=Map2, 2=Map3, 3=Map4)
+ * @return The actual map set that was activated (clamped to valid range)
+ */
+uint8_t setMapSet(uint8_t mapSet)
+{
+  if(mapSet > 3) { mapSet = 3; }
+  currentMapSet = mapSet;
+  return currentMapSet;
+}
+
+/** Get the currently active map set (0-3).
+ * @return Current map set (0=Map1, 1=Map2, 2=Map3, 3=Map4)
+ */
+uint8_t getMapSet(void)
+{
+  return currentMapSet;
+}
 struct table3d16RpmLoad afrTable; ///< 16x16 afr target map
 struct table3d8RpmLoad stagingTable; ///< 8x8 fuel staging table
 struct table3d8RpmLoad boostTable; ///< 8x8 boost map

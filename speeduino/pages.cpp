@@ -351,6 +351,19 @@ static page_map_t getPageMap(uint8_t pageNumber)
     makeEntity(&boostTableLookupDuty),
     makeEntity(&configPage15, sizeof(configPage15)),
   };
+  // Multi-map pages
+  static constexpr entity_t fuel3PageMap[] PROGMEM = {
+    makeEntity(&fuelTable3)
+  };
+  static constexpr entity_t ign3PageMap[] PROGMEM = {
+    makeEntity(&ignitionTable3),
+  };
+  static constexpr entity_t fuel4PageMap[] PROGMEM = {
+    makeEntity(&fuelTable4)
+  };
+  static constexpr entity_t ign4PageMap[] PROGMEM = {
+    makeEntity(&ignitionTable4),
+  };
 
   static constexpr page_map_t pageMaps[MAX_PAGE_NUM] PROGMEM = {
     { pageZeroMap, _countof(pageZeroMap) },
@@ -366,9 +379,14 @@ static page_map_t getPageMap(uint8_t pageNumber)
     { warmUpPageMap, _countof(warmUpPageMap) },
     { fuel2PageMap, _countof(fuel2PageMap) },
     { wmiPageMap, _countof(wmiPageMap) },
-    { progOutsPageMap, _countof(progOutsPageMap) },    
+    { progOutsPageMap, _countof(progOutsPageMap) },
     { ign2PageMap, _countof(ign2PageMap) },
     { boostVvt2PageMap, _countof(boostVvt2PageMap) },
+    // Multi-map pages
+    { fuel3PageMap, _countof(fuel3PageMap) },
+    { ign3PageMap, _countof(ign3PageMap) },
+    { fuel4PageMap, _countof(fuel4PageMap) },
+    { ign4PageMap, _countof(ign4PageMap) },
   };
 
   if (pageNumber>=MAX_PAGE_NUM)
