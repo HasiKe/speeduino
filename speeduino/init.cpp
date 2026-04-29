@@ -2283,110 +2283,145 @@ void setPinMapping(byte boardID)
       #endif
       break;
     
+/*
+ * ============================================================================
+ * Gen 1 Hayabusa ECU - Board Configuration for Speeduino
+ * ============================================================================
+ * 
+ * Hardware:
+ *   - Teensy 4.1 Microcontroller
+ *   - MC33810 Driver IC (SPI-controlled injectors + ignition)
+ *   - TC4424A Gate Drivers
+ *   - IRFB4110PBF MOSFETs for ignition
+ * 
+ * INSTALLATION:
+ *   1. Add this case to speeduino/init.cpp inside setPinMapping() function
+ *   2. Add "Gen1 Hayabusa ECU" to reference/speeduino.ini at position 57
+ *   3. Compile and upload
+ *   4. Select board in TunerStudio
+ * 
+ * ============================================================================
+ */
+
     case 57:
-      #if defined(CORE_TEENSY)
-      //Pin mappings for the DropBear
+      // Gen 1 Hayabusa ECU with MC33810
+      #if defined(CORE_TEENSY41) || defined(CORE_TEENSY40)
+      
+      //=========================================================================
+      // MC33810 OUTPUT CONTROL - CRITICAL!
+      // This tells Speeduino to use SPI communication instead of direct GPIO
+      //=========================================================================
       injectorOutputControl = OUTPUT_CONTROL_MC33810;
       ignitionOutputControl = OUTPUT_CONTROL_MC33810;
-
-      //The injector pins below are not used directly as the control is via SPI through the MC33810s, however the pin numbers are set to be the SPI pins (SCLK, MOSI, MISO and CS) so that nothing else will set them as inputs
-      pinInjector1 = 13; //SCLK
-      pinInjector2 = 11; //MOSI
-      pinInjector3 = 12; //MISO
-      pinInjector4 = 10; //CS for MC33810 1
-      //pinInjector5 = 10; //CS for MC33810 2
-      //pinInjector6 = 10; //CS for MC33810 3
-
       
-
-      //Dummy pins, without these pin 0 (Serial1 RX) gets overwritten
-      pinCoil1 = 35;
-      pinCoil2 = 35;
-      /*
-      pinCoil3 = 55;
-      pinCoil4 = 55;
-      pinCoil5 = 55;
-      pinCoil6 = 55;
-      */
+      //=========================================================================
+      // MC33810 SPI CHIP SELECT
+      // Adjust this to match your PCB layout!
+      //=========================================================================
+      pinMC33810_1_CS = 10;   // SPI CS for MC33810 - VERIFY WITH YOUR SCHEMATIC
       
-      pinTrigger = 19; //The CAS pin
-      pinTrigger2 = 18; //The Cam Sensor pin
-      pinTrigger3 = 22; //Uses one of the protected spare digital inputs. This must be set or Serial1 (Pin 0) gets broken
-      pinFlex = A14; // Flex sensor
-      pinMAP = A5; //MAP sensor pin
-      pinBaro = A4; //Baro sensor pin
-      pinBat = A15; //Battery reference voltage pin
-      pinSpareTemp1 = A16; //spare Analog input 1
-      pinLaunch = 36; //Can be overwritten below
-      pinTachOut = 5; //Tacho output pin
-      pinIdle1 = 27; //Single wire idle control
-      pinIdle2 = 29; //2 wire idle control. Shared with Spare 1 output
-      pinFuelPump = 8; //Fuel pump output
-      pinVVT_1 = 28; //Default VVT output
-      pinStepperDir = 32; //Direction pin  for DRV8825 driver
-      pinStepperStep = 31; //Step pin for DRV8825 driver
-      pinStepperEnable = 30; //Enable pin for DRV8825 driver
-      pinBoost = 24; //Boost control
-      pinSpareLOut1 = 29; //low current output spare1
-      pinSpareLOut2 = 26; //low current output spare2
-      pinSpareLOut3 = 28; //low current output spare3
-      pinSpareLOut4 = 29; //low current output spare4
-      pinFan = 25; //Pin for the fan output
-      pinResetControl = 33; //Reset control output PLACEHOLDER value for now
-      pinVSS = 22;
-
-      pinWMIEmpty = 23; //Tip Over Sensor input
-      pinWMIIndicator = pinSpareLOut2; //Spare output
-      pinWMIEnabled = pinSpareLOut1; //Spare output
-
-      //CS pin number is now set in a compile flag. 
-      #ifdef USE_SPI_EEPROM
-        pinSPIFlash_CS = 6;
-        //pinMC33814_CS = 2;
-      #endif
-
-      #ifdef USE_MC33814_IGNITION
-        pinMC33814_CS = 2;
-      #endif
-
-      #if defined(CORE_TEENSY41)
-        pinTPS = A3; //TPS input pin
-        pinIAT = A0; //IAT sensor pin
-        pinCLT = A1; //CLS sensor pin
-        pinO2 = A2; //O2 Sensor pin
-        pinO2_2 = A17; //Spare 2
-
-        pSecondarySerial = &Serial1; //Header that is broken out on Dropbear boards is attached to Serial1
-      #endif
-
-
-      pinMC33810_1_CS = 10;
-      pinMC33810_2_CS = 10;
-
-      //Pin alignment to the MC33810 outputs
-      MC33810_BIT_INJ1 = 3;
-      MC33810_BIT_INJ2 = 1;
-      MC33810_BIT_INJ3 = 0;
-      MC33810_BIT_INJ4 = 2;
-      MC33810_BIT_IGN1 = 4;
-      MC33810_BIT_IGN2 = 5;
-      MC33810_BIT_IGN3 = 6;
-      MC33810_BIT_IGN4 = 7;
-
-      MC33810_BIT_INJ5 = 3;
-      MC33810_BIT_INJ6 = 1;
-      MC33810_BIT_INJ7 = 0;
-      MC33810_BIT_INJ8 = 2;
-      MC33810_BIT_IGN5 = 4;
-      MC33810_BIT_IGN6 = 5;
-      MC33810_BIT_IGN7 = 6;
-      MC33810_BIT_IGN8 = 7;
-
-
-
+      //=========================================================================
+      // INJECTORS - MC33810 Low-Side Drivers (OUT0-OUT3)
+      // These are bit positions in MC33810, NOT Teensy GPIO pins!
+      //=========================================================================
+      pinInjector1 = 0;       // MC33810 OUT0 → Injector 1
+      pinInjector2 = 1;       // MC33810 OUT1 → Injector 2
+      pinInjector3 = 2;       // MC33810 OUT2 → Injector 3
+      pinInjector4 = 3;       // MC33810 OUT3 → Injector 4
+      
+      //=========================================================================
+      // IGNITION - MC33810 Gate Drivers (GD0-GD3) → TC4424A → IRFB4110 → Coils
+      // These are bit positions in MC33810, NOT Teensy GPIO pins!
+      //=========================================================================
+      pinCoil1 = 4;           // MC33810 GD0 → Coil 1
+      pinCoil2 = 5;           // MC33810 GD1 → Coil 2
+      pinCoil3 = 6;           // MC33810 GD2 → Coil 3
+      pinCoil4 = 7;           // MC33810 GD3 → Coil 4
+      
+      //=========================================================================
+      // TRIGGER INPUTS - Verify these match your Teensy wiring!
+      //=========================================================================
+      pinTrigger = 22;        // Crank Position Sensor (CKP) - Primary
+      pinTrigger2 = 23;       // Cam Position Sensor (CMP) - Secondary (if used)
+      // pinTrigger3 = XX;    // Tertiary trigger (uncomment if needed)
+      
+      //=========================================================================
+      // ANALOG INPUTS - Sensors
+      //=========================================================================
+      pinTPS = A0;            // Throttle Position Sensor
+      pinMAP = A1;            // Manifold Absolute Pressure
+      pinIAT = A2;            // Intake Air Temperature
+      pinCLT = A3;            // Coolant Temperature
+      pinO2 = A4;             // Oxygen Sensor (Lambda)
+      pinBat = A5;            // Battery Voltage Reference
+      // pinO2_2 = A6;        // Second O2 sensor (uncomment if needed)
+      // pinBaro = A7;        // External Barometric sensor (uncomment if needed)
+      
+      //=========================================================================
+      // DIGITAL OUTPUTS - Auxiliary Functions
+      //=========================================================================
+      pinFuelPump = 2;        // Fuel Pump Relay
+      pinTachOut = 3;         // Tachometer Output
+      pinIdle1 = 4;           // Idle Air Control Valve (PWM or Stepper)
+      pinIdle2 = 5;           // IAC Channel 2 (for 2-wire or stepper)
+      pinFan = 6;             // Radiator Fan Control
+      pinBoost = 7;           // Boost Control Solenoid (if turbo)
+      pinVVT_1 = 8;           // Variable Valve Timing (if applicable)
+      
+      //=========================================================================
+      // OPTIONAL OUTPUTS
+      //=========================================================================
+      pinSpareOut1 = 24;      // Spare High-Current Output 1
+      pinSpareOut2 = 25;      // Spare High-Current Output 2
+      pinSpareLOut1 = 26;     // Spare Low-Current Output 1
+      // pinStepperDir = XX;  // Stepper direction (if using stepper IAC)
+      // pinStepperStep = XX; // Stepper step (if using stepper IAC)
+      
+      //=========================================================================
+      // OPTIONAL INPUTS
+      //=========================================================================
+      // pinFlex = XX;        // Flex Fuel Sensor (uncomment if needed)
+      // pinLaunch = XX;      // Launch Control Input
+      // pinSpareTemp1 = A8;  // Additional temperature input
+      
       #endif
       break;
-    
+
+/*
+ * ============================================================================
+ * NOTES:
+ * ============================================================================
+ * 
+ * 1. MC33810 BIT ASSIGNMENTS:
+ *    The MC33810 uses SPI commands where each bit controls one output:
+ *    
+ *    Bit 0 (0x01) = OUT0 = Injector 1
+ *    Bit 1 (0x02) = OUT1 = Injector 2
+ *    Bit 2 (0x04) = OUT2 = Injector 3
+ *    Bit 3 (0x08) = OUT3 = Injector 4
+ *    Bit 4 (0x10) = GD0  = Coil 1
+ *    Bit 5 (0x20) = GD1  = Coil 2
+ *    Bit 6 (0x40) = GD2  = Coil 3
+ *    Bit 7 (0x80) = GD3  = Coil 4
+ *    
+ * 2. SPI PINS (Teensy 4.1 defaults):
+ *    MOSI = Pin 11
+ *    MISO = Pin 12
+ *    SCK  = Pin 13
+ *    CS   = Configurable (set in pinMC33810_1_CS)
+ *    
+ * 3. IMPORTANT: 
+ *    - The injector and coil pin values (0-7) are MC33810 bit positions
+ *    - They are NOT Teensy GPIO pin numbers when using OUTPUT_CONTROL_MC33810
+ *    - All other pins (triggers, sensors, aux) ARE Teensy GPIO pins
+ *    
+ * 4. TESTING:
+ *    - Test with LEDs before connecting to actual injectors/coils
+ *    - Use a logic analyzer to verify SPI communication
+ *    - Check MC33810 diagnostic registers for fault conditions
+ *    
+ * ============================================================================
+ */
  
     case 60:
         #if defined(STM32F407xx)

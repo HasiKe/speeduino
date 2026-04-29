@@ -3,23 +3,25 @@
 #include "src/pins/fastOutputPin.h"
 #include "globals.h"
 
-uint8_t MC33810_BIT_INJ1 = 1;
-uint8_t MC33810_BIT_INJ2 = 2;
-uint8_t MC33810_BIT_INJ3 = 3;
-uint8_t MC33810_BIT_INJ4 = 4;
-uint8_t MC33810_BIT_INJ5 = 5;
-uint8_t MC33810_BIT_INJ6 = 6;
-uint8_t MC33810_BIT_INJ7 = 7;
-uint8_t MC33810_BIT_INJ8 = 8;
+// Korrekte Bit-Positionen für MC33810 On/Off Command (0x3000)
+// OUT[3:0] = Bits 7-4, GD[3:0] = Bits 11-8
+uint8_t MC33810_BIT_INJ1 = 4;   // OUT0 = Bit 4
+uint8_t MC33810_BIT_INJ2 = 5;   // OUT1 = Bit 5
+uint8_t MC33810_BIT_INJ3 = 6;   // OUT2 = Bit 6
+uint8_t MC33810_BIT_INJ4 = 7;   // OUT3 = Bit 7
+uint8_t MC33810_BIT_INJ5 = 4;   // OUT0 am zweiten IC
+uint8_t MC33810_BIT_INJ6 = 5;   // OUT1 am zweiten IC
+uint8_t MC33810_BIT_INJ7 = 6;   // OUT2 am zweiten IC
+uint8_t MC33810_BIT_INJ8 = 7;   // OUT3 am zweiten IC
 
-uint8_t MC33810_BIT_IGN1 = 1;
-uint8_t MC33810_BIT_IGN2 = 2;
-uint8_t MC33810_BIT_IGN3 = 3;
-uint8_t MC33810_BIT_IGN4 = 4;
-uint8_t MC33810_BIT_IGN5 = 5;
-uint8_t MC33810_BIT_IGN6 = 6;
-uint8_t MC33810_BIT_IGN7 = 7;
-uint8_t MC33810_BIT_IGN8 = 8;
+uint8_t MC33810_BIT_IGN1 = 8;   // GD0 = Bit 8
+uint8_t MC33810_BIT_IGN2 = 9;   // GD1 = Bit 9
+uint8_t MC33810_BIT_IGN3 = 10;  // GD2 = Bit 10
+uint8_t MC33810_BIT_IGN4 = 11;  // GD3 = Bit 11
+uint8_t MC33810_BIT_IGN5 = 8;   // GD0 am zweiten IC
+uint8_t MC33810_BIT_IGN6 = 9;   // GD1 am zweiten IC
+uint8_t MC33810_BIT_IGN7 = 10;  // GD2 am zweiten IC
+uint8_t MC33810_BIT_IGN8 = 11;  // GD3 am zweiten IC
 
 static fastOutputPin_t mc33810_1_pin;
 static fastOutputPin_t mc33810_2_pin;
