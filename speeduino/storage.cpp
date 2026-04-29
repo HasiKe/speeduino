@@ -95,6 +95,9 @@ constexpr uint16_t EEPROM_CONFIG16_MAP   = 3500;  // fuelTable3
 constexpr uint16_t EEPROM_CONFIG17_MAP   = 3800;  // ignitionTable3
 constexpr uint16_t EEPROM_CONFIG18_MAP   = 4100;  // fuelTable4
 constexpr uint16_t EEPROM_CONFIG19_MAP   = 4400;  // ignitionTable4
+//Multi-map boost tables (pages 20-21) - each 8x8 table ~82 bytes
+constexpr uint16_t EEPROM_CONFIG20_MAP   = 4700;  // boostTable3
+constexpr uint16_t EEPROM_CONFIG21_MAP   = 4800;  // boostTable4
 
 #if defined(UNIT_TEST)
 uint16_t MAX_PAGE_ADDRESS = EEPROM_LAST_BARO-sizeof(uint8_t);
@@ -143,6 +146,9 @@ TESTABLE_STATIC uint16_t getEntityStartAddress(page_iterator_t iter) {
     { &ignitionTable3, EEPROM_CONFIG17_MAP },
     { &fuelTable4, EEPROM_CONFIG18_MAP },
     { &ignitionTable4, EEPROM_CONFIG19_MAP },
+    // Multi-map boost tables
+    { &boostTable3, EEPROM_CONFIG20_MAP },
+    { &boostTable4, EEPROM_CONFIG21_MAP },
   };
   static const constexpr entity_storage_map_t* entityMapEnd = entityMap + _countof(entityMap);
 
@@ -407,6 +413,22 @@ void savePage(uint8_t pageNum)
       writesRemaining = writeTable(&ignitionTable4, decltype(ignitionTable4)::type_key, EEPROM_CONFIG19_MAP, writesRemaining);
       break;
 
+    case boostMap3Page:
+      /*---------------------------------------------------
+      | Boost table 3 (Multi-map) - Page 20
+      | 8x8 table itself + the 8 values along each of the axis
+      -----------------------------------------------------*/
+      writesRemaining = writeTable(&boostTable3, decltype(boostTable3)::type_key, EEPROM_CONFIG20_MAP, writesRemaining);
+      break;
+
+    case boostMap4Page:
+      /*---------------------------------------------------
+      | Boost table 4 (Multi-map) - Page 21
+      | 8x8 table itself + the 8 values along each of the axis
+      -----------------------------------------------------*/
+      writesRemaining = writeTable(&boostTable4, decltype(boostTable4)::type_key, EEPROM_CONFIG21_MAP, writesRemaining);
+      break;
+
     default:
       break;
   }
@@ -535,6 +557,11 @@ void loadAllPages(void)
   (void)loadTable(&ignitionTable3, decltype(ignitionTable3)::type_key, EEPROM_CONFIG17_MAP);
   (void)loadTable(&fuelTable4, decltype(fuelTable4)::type_key, EEPROM_CONFIG18_MAP);
   (void)loadTable(&ignitionTable4, decltype(ignitionTable4)::type_key, EEPROM_CONFIG19_MAP);
+
+  //*********************************************************************************************************************************************************************************
+  // Multi-map boost tables
+  (void)loadTable(&boostTable3, decltype(boostTable3)::type_key, EEPROM_CONFIG20_MAP);
+  (void)loadTable(&boostTable4, decltype(boostTable4)::type_key, EEPROM_CONFIG21_MAP);
 
   //*********************************************************************************************************************************************************************************
 }

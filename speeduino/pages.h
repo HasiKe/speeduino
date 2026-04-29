@@ -29,8 +29,11 @@ constexpr uint8_t fuelMap3Page  = 16;
 constexpr uint8_t ignMap3Page   = 17;
 constexpr uint8_t fuelMap4Page  = 18;
 constexpr uint8_t ignMap4Page   = 19;
+// Multi-map boost pages
+constexpr uint8_t boostMap3Page = 20;
+constexpr uint8_t boostMap4Page = 21;
 constexpr uint8_t MIN_PAGE_NUM  = veSetPage;
-constexpr uint8_t MAX_PAGE_NUM  = (ignMap4Page+1U);
+constexpr uint8_t MAX_PAGE_NUM  = (boostMap4Page+1U);
 
 /** @brief Fill the tune (config pages & tables) with zeroes. */
 void setTuneToEmpty(void);

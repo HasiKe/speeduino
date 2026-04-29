@@ -22,6 +22,20 @@ constexpr uint8_t SIMPLE_BOOST_P = 1U;
 constexpr uint8_t SIMPLE_BOOST_I = 1U;
 constexpr uint8_t SIMPLE_BOOST_D = 1U;
 
+/** Get pointer to currently active boost table based on currentMapSet.
+ * Uses boostTable for Map 1/2, boostTable3 for Map 3, boostTable4 for Map 4
+ * @return Pointer to the active boost table
+ */
+static inline table3d8RpmLoad* getActiveBoostTable(void)
+{
+  switch(currentMapSet)
+  {
+    case 2:  return &boostTable3;
+    case 3:  return &boostTable4;
+    default: return &boostTable;  // Map 1 and 2 use original boostTable
+  }
+}
+
 static long vvt1_pwm_value;
 static long vvt2_pwm_value;
 static volatile unsigned int vvt1_pwm_cur_value;
@@ -697,32 +711,32 @@ static void boostByGear(void)
       switch (currentStatus.gear)
       {
         case 1:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear1 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear1 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
           if( combinedBoost <= 10000 ){ currentStatus.boostDuty = combinedBoost; }
           else{ currentStatus.boostDuty = 10000; }
           break;
         case 2:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear2 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear2 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
           if( combinedBoost <= 10000 ){ currentStatus.boostDuty = combinedBoost; }
           else{ currentStatus.boostDuty = 10000; }
           break;
         case 3:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear3 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear3 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
           if( combinedBoost <= 10000 ){ currentStatus.boostDuty = combinedBoost; }
           else{ currentStatus.boostDuty = 10000; }
           break;
         case 4:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear4 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear4 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
           if( combinedBoost <= 10000 ){ currentStatus.boostDuty = combinedBoost; }
           else{ currentStatus.boostDuty = 10000; }
           break;
         case 5:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear5 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear5 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
           if( combinedBoost <= 10000 ){ currentStatus.boostDuty = combinedBoost; }
           else{ currentStatus.boostDuty = 10000; }
           break;
         case 6:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear6 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear6 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM))  ) << 2;
           if( combinedBoost <= 10000 ){ currentStatus.boostDuty = combinedBoost; }
           else{ currentStatus.boostDuty = 10000; }
           break;
@@ -765,32 +779,32 @@ static void boostByGear(void)
       switch (currentStatus.gear)
       {
         case 1:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear1 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear1 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
           if( combinedBoost <= 511 ){ currentStatus.boostTarget = combinedBoost; }
           else{ currentStatus.boostTarget = 511; }
           break;
         case 2:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear2 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear2 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
           if( combinedBoost <= 511 ){ currentStatus.boostTarget = combinedBoost; }
           else{ currentStatus.boostTarget = 511; }
           break;
         case 3:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear3 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear3 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
           if( combinedBoost <= 511 ){ currentStatus.boostTarget = combinedBoost; }
           else{ currentStatus.boostTarget = 511; }
           break;
         case 4:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear4 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear4 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
           if( combinedBoost <= 511 ){ currentStatus.boostTarget = combinedBoost; }
           else{ currentStatus.boostTarget = 511; }
           break;
         case 5:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear5 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear5 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
           if( combinedBoost <= 511 ){ currentStatus.boostTarget = combinedBoost; }
           else{ currentStatus.boostTarget = 511; }
           break;
         case 6:
-          combinedBoost = ( ((uint16_t)configPage9.boostByGear6 * (uint16_t)get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
+          combinedBoost = ( ((uint16_t)configPage9.boostByGear6 * (uint16_t)get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM)) / 100 ) << 2;
           if( combinedBoost <= 511 ){ currentStatus.boostTarget = combinedBoost; }
           else{ currentStatus.boostTarget = 511; }
           break;
@@ -835,7 +849,7 @@ void boostControl(void)
     {
       //Open loop
       if ( (configPage9.boostByGearEnabled > 0) && isExternalVssMode(configPage2) ){ boostByGear(); }
-      else{ currentStatus.boostDuty = get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM) * 2 * 100; }
+      else{ currentStatus.boostDuty = get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM) * 2 * 100; }
 
       if(currentStatus.boostDuty > 10000) { currentStatus.boostDuty = 10000; } //Safety check
       if(currentStatus.boostDuty == 0) { DISABLE_BOOST_TIMER(); boost_pin.setPinLow(); } //If boost duty is 0, shut everything down
@@ -849,7 +863,7 @@ void boostControl(void)
       if( (boostCounter & 7) == 1) 
       { 
         if ( (configPage9.boostByGearEnabled > 0) && isExternalVssMode(configPage2) ){ boostByGear(); }
-        else{ currentStatus.boostTarget = get3DTableValue(&boostTable, (currentStatus.TPS * 2U), currentStatus.RPM) << 1; } //Boost target table is in kpa and divided by 2
+        else{ currentStatus.boostTarget = get3DTableValue(getActiveBoostTable(), (currentStatus.TPS * 2U), currentStatus.RPM) << 1; } //Boost target table is in kpa and divided by 2
 
         //If flex fuel is enabled, there can be an adder to the boost target based on ethanol content
         if( configPage2.flexEnabled == 1 )

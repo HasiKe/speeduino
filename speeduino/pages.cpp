@@ -364,6 +364,13 @@ static page_map_t getPageMap(uint8_t pageNumber)
   static constexpr entity_t ign4PageMap[] PROGMEM = {
     makeEntity(&ignitionTable4),
   };
+  // Multi-map boost pages
+  static constexpr entity_t boost3PageMap[] PROGMEM = {
+    makeEntity(&boostTable3)
+  };
+  static constexpr entity_t boost4PageMap[] PROGMEM = {
+    makeEntity(&boostTable4)
+  };
 
   static constexpr page_map_t pageMaps[MAX_PAGE_NUM] PROGMEM = {
     { pageZeroMap, _countof(pageZeroMap) },
@@ -387,6 +394,9 @@ static page_map_t getPageMap(uint8_t pageNumber)
     { ign3PageMap, _countof(ign3PageMap) },
     { fuel4PageMap, _countof(fuel4PageMap) },
     { ign4PageMap, _countof(ign4PageMap) },
+    // Multi-map boost pages
+    { boost3PageMap, _countof(boost3PageMap) },
+    { boost4PageMap, _countof(boost4PageMap) },
   };
 
   if (pageNumber>=MAX_PAGE_NUM)
