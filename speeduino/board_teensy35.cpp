@@ -1,6 +1,11 @@
 #include "board_definition.h"
 
 #if defined(CORE_TEENSY) && defined(CORE_TEENSY35)
+#ifdef USE_SPI_EEPROM
+  #include "src/SPIAsEEPROM/SPIAsEEPROM.h"
+#else
+  #include <EEPROM.h>
+#endif
 #include "auxiliaries.h"
 #include "idle.h"
 #include "scheduler.h"
@@ -8,6 +13,7 @@
 #include "comms_secondary.h"
 #include <InternalTemperature.h>
 #include RTC_LIB_H
+#include "board_eeprom_adapter.hpp"
 
  //These are declared locally in comms_CAN now due to this issue: https://github.com/tonton81/FlexCAN_T4/issues/67
 // #if defined(__MK64FX512__)         // use for Teensy 3.5 only 
@@ -17,6 +23,7 @@
 //   FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> Can1; 
 // #endif
 
+static IntervalTimer lowResTimer;
 
 void initBoard(uint32_t baudRate)
 {
@@ -436,6 +443,29 @@ void boardInitRTC(void)
 void boardInitPins(void)
 {
   // Do nothing
+}
+
+static uint16_t getEepromWriteBlockSize(const statuses &current)
+{
+#if defined(USE_SPI_EEPROM)
+  //For use with common Winbond SPI EEPROMs Eg W25Q16JV
+  uint16_t maxWrite = 20; //This needs tuning
+#else
+  uint16_t maxWrite = 64;
+#endif
+  // Write to EEPROM more aggressively if the engine is not running
+  if(current.RPM==0U)
+  { 
+    return maxWrite * 8U;
+  } 
+
+  return maxWrite;
+}
+
+/** @brief Get the EEPROM storage API for the board */
+storage_api_t getBoardStorageApi(void)
+{
+  return getEEPROMStorageApi(getEepromWriteBlockSize);
 }
 
 #endif

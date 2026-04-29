@@ -41,10 +41,8 @@ See page 136 of the processors datasheet: http://www.atmel.com/Images/doc2549.pd
 #ifndef SCHEDULER_H
 #define SCHEDULER_H
 
-#include <SimplyAtomic.h>
 #include "globals.h"
 #include "crankMaths.h"
-#include "scheduledIO.h"
 
 #define USE_IGN_REFRESH
 #define IGNITION_REFRESH_THRESHOLD  30 //Time in uS that the refresh functions will check to ensure there is enough time before changing the end compare
@@ -53,10 +51,7 @@ void initialiseIgnitionSchedulers(void);
 
 void startIgnitionSchedulers(void);
 void stopIgnitionSchedulers(void);
-void disableIgnSchedule(uint8_t channel);
-
 void refreshIgnitionSchedule1(unsigned long timeToEnd);
-void disableAllIgnSchedules(void);
 
 void initialiseFuelSchedulers(void);
 
@@ -64,9 +59,6 @@ void startFuelSchedulers(void);
 void stopFuelSchedulers(void);
 
 void beginInjectorPriming(void);
-
-void disableFuelSchedule(uint8_t channel);
-void disableAllFuelSchedules(void);
 
 /** \enum ScheduleStatus
  * @brief The current state of a schedule
@@ -84,6 +76,8 @@ enum ScheduleStatus {
   RUNNING_WITHNEXT = 0b00000100U,
 }; 
 
+/** @brief A scheduler callback that does nothing */
+static inline void nullCallback(void) { return; }
 
 /**
  * @brief A schedule for a single output channel. 
@@ -123,7 +117,9 @@ struct Schedule {
     : _counter(counter)
     , _compare(compare) 
   {
-  }  
+  }
+
+  using callback = void(*)(void);
 
   /**
    * @brief Scheduled duration (timer ticks) 
@@ -134,8 +130,8 @@ struct Schedule {
    */
   volatile COMPARE_TYPE duration = 0U;
   volatile ScheduleStatus Status = OFF;  ///< Schedule status: OFF, PENDING, STAGED, RUNNING
-  voidVoidCallback pStartCallback = &nullCallback; ///< Start Callback function for schedule
-  voidVoidCallback pEndCallback = &nullCallback;   ///< End Callback function for schedule
+  callback pStartCallback = &nullCallback; ///< Start Callback function for schedule
+  callback pEndCallback = &nullCallback;   ///< End Callback function for schedule
   COMPARE_TYPE nextStartCompare = 0U;   ///< Planned start of next schedule (when current schedule is RUNNING)
   
   counter_t &_counter;       ///< **Reference** to the counter register. E.g. TCNT3
@@ -157,7 +153,7 @@ static inline bool isRunning(const Schedule &schedule) {
  * @param pStartCallback Start callback
  * @param pEndCallback End callback
  */
-void setCallbacks(Schedule &schedule, voidVoidCallback pStartCallback, voidVoidCallback pEndCallback);
+void setCallbacks(Schedule &schedule, Schedule::callback pStartCallback, Schedule::callback pEndCallback);
 
 /**
  * @brief Set the schedule action to run for a certain duration in the future
@@ -168,7 +164,6 @@ void setCallbacks(Schedule &schedule, voidVoidCallback pStartCallback, voidVoidC
  * @param allowQueuedSchedule true to allow a schedule to be queued up if one is currently running; false otherwise
  */
 void setSchedule(Schedule &schedule, uint32_t delay, uint16_t duration, bool allowQueuedSchedule);
-
 
 /** Ignition schedule.
  */

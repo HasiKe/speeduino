@@ -1,5 +1,7 @@
-#include "../device_test_harness.h"
+#include "../test_harness_device.h"
+#include "../test_harness_native.h"
 #include "storage.h"
+#include "pages.h"
 #include "globals.h"
 
 // Since it's almost impossible for the tests to clean up
@@ -13,9 +15,9 @@
 // 3. initialiseAll()
 // 4. ASSERT on the results.
 void prepareForInitialiseAll(uint8_t boardId) {
-  resetConfigPages();
+  setTuneToEmpty();
   // This is required to prevent initialiseAll() also
-  // calling resetConfigPages & thus blatting any
+  // calling setTuneToEmpty & thus blatting any
   // configuration made in step 2.
   configPage2.pinMapping = boardId;
   currentStatus.initialisationComplete = false;
@@ -32,4 +34,4 @@ void runAllInitTests(void)
     testIgnitionScheduleInit();
 }
 
-DEVICE_TEST(runAllInitTests)
+TEST_HARNESS(runAllInitTests)

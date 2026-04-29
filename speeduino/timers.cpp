@@ -14,11 +14,14 @@ Timers are typically low resolution (Compared to Schedulers), with maximum frequ
 #include "globals.h"
 #include "sensors.h"
 #include "scheduler.h"
-#include "scheduledIO.h"
-#include "scheduler.h"
 #include "auxiliaries.h"
 #include "comms.h"
 #include "maths.h"
+#include "preprocessor.h"
+#include "scheduledIO_ign.h"
+#include "scheduledIO_inj.h"
+#include "src/pins/fastOutputPin.h"
+#include "src/pins/outputPin.h"
 
 volatile uint16_t lastRPM_100ms; //Need to record this for rpmDOT calculation
 volatile byte loop5ms;
@@ -38,11 +41,7 @@ volatile uint16_t tachoSweepAccum;
 volatile uint8_t testInjectorPulseCount = 0;
 volatile uint8_t testIgnitionPulseCount = 0;
 
-#if defined (CORE_TEENSY)
-  IntervalTimer lowResTimer;
-#endif
-
-void initialiseTimers(void)
+void __attribute__((optimize("Os"))) initialiseTimers(void)
 {
   lastRPM_100ms = 0;
   loop5ms = 0;
@@ -52,7 +51,24 @@ void initialiseTimers(void)
   loop100ms = 0;
   loop250ms = 0;
   loopSec = 0;
+}
+
+static boardOutputPin_t tach_pin;
+
+void __attribute__((optimize("Os"))) initTacho(uint8_t tachoPin)
+{
+  tach_pin.setPin(tachoPin, OUTPUT);
   tachoOutputFlag = TACHO_INACTIVE;
+}
+
+void tachoPulseHigh(void)
+{
+  tach_pin.setPinHigh();
+}
+
+void tachoPulseLow(void)
+{
+  tach_pin.setPinLow();
 }
 
 static inline void applyOverDwellCheck(IgnitionSchedule &schedule, uint32_t targetOverdwellTime) {
@@ -132,7 +148,7 @@ void oneMSInterval(void)
     //Check for half speed tacho
     if( (configPage2.tachoDiv == 0) || (currentStatus.tachoAlt == true) ) 
     { 
-      TACHO_PULSE_LOW();
+      tach_pin.setPinLow();
       //ms_counter is cast down to a byte as the tacho duration can only be in the range of 1-6, so no extra resolution above that is required
       tachoEndTime = (uint8_t)ms_counter + configPage2.tachoDuration;
       tachoOutputFlag = ACTIVE;
@@ -149,7 +165,7 @@ void oneMSInterval(void)
     //If the tacho output is already active, check whether it's reached it's end time
     if((uint8_t)ms_counter == tachoEndTime)
     {
-      TACHO_PULSE_HIGH();
+      tach_pin.setPinHigh();
       tachoOutputFlag = TACHO_INACTIVE;
     }
   }
@@ -280,7 +296,7 @@ void oneMSInterval(void)
         if(currentStatus.RPM == 0)
         {
           //If we reach here then the priming is complete, however only turn off the fuel pump if the engine isn't running
-          FUEL_PUMP_OFF();
+          fuelPumpOff();
         }
       }
     }
@@ -322,7 +338,7 @@ void oneMSInterval(void)
 
       //Continental flex sensor fuel temperature can be read with following formula: (Temperature = (41.25 * pulse width(ms)) - 81.25). 1000μs = -40C and 5000μs = 125C
       flexPulseWidth = constrain(flexPulseWidth, 1000UL, 5000UL);
-      int32_t tempX100 = (int32_t)rshift<10>(4224UL * flexPulseWidth) - 8125L; //Split up for MISRA compliance
+      int32_t tempX100 = (int32_t)rshift<10>((uint32_t)(4224UL * flexPulseWidth)) - 8125L; //Split up for MISRA compliance
       currentStatus.fuelTemp = div100((int16_t)tempX100);     
     }
   }

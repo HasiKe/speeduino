@@ -26,7 +26,6 @@ A full copy of the license may be found in the projects root directory
  */
 #include "globals.h"
 #include "scheduler.h"
-#include "scheduledIO.h"
 #include "timers.h"
 #include "schedule_calcs.h"
 #include "preprocessor.h"
@@ -268,7 +267,7 @@ void stopFuelSchedulers(void)
 #endif  
 }
 
-void setCallbacks(Schedule &schedule, voidVoidCallback pStartCallback, voidVoidCallback pEndCallback)
+void setCallbacks(Schedule &schedule, Schedule::callback pStartCallback, Schedule::callback pEndCallback)
 {
   schedule.pStartCallback = pStartCallback;
   schedule.pEndCallback = pEndCallback;
@@ -276,15 +275,11 @@ void setCallbacks(Schedule &schedule, voidVoidCallback pStartCallback, voidVoidC
 
 // Event duration cannot be longer than the maximum timer period
 static inline uint16_t clipDuration(uint16_t duration) {
-#ifndef MAX_TIMER_PERIOD
-  #error MAX_TIMER_PERIOD must be defined
-#else
-#if MAX_TIMER_PERIOD < UINT16_MAX //cppcheck-suppress misra-c2012-20.9
-  return min((uint16_t)(MAX_TIMER_PERIOD - 1U), duration);
-#else
+  if (MAX_TIMER_PERIOD < (uint32_t)UINT16_MAX)
+  {
+    return min((uint16_t)(MAX_TIMER_PERIOD - 1U), duration);
+  }
   return duration;
-#endif
-#endif
 }
 
 static inline void setScheduleNext(Schedule &schedule, uint32_t delay, uint16_t duration)
@@ -339,7 +334,7 @@ void refreshIgnitionSchedule1(unsigned long timeToEnd)
   }
 }
 
-static table2D_u8_u8_4 PrimingPulseTable(&configPage2.primeBins, &configPage2.primePulse);
+constexpr table2D_u8_u8_4 PrimingPulseTable(&configPage2.primeBins, &configPage2.primePulse);
 
 /** Perform the injector priming pulses.
  * Set these to run at an arbitrary time in the future (100us).
@@ -448,84 +443,4 @@ END_LTO_INLINE()
 void moveToNextState(IgnitionSchedule &schedule)
 {
   movetoNextState(schedule, ignitionPendingToRunning, ignitionRunningToOff, ignitionRunningToPending);
-}
-
-static void disableSchedule(Schedule &schedule)
-{
-  ATOMIC() {
-    if(schedule.Status == PENDING) { 
-      schedule.Status = OFF; 
-    } else if(schedule.Status == RUNNING_WITHNEXT) { 
-      schedule.Status = RUNNING; 
-    } else {
-      // Must be off already :-)
-    }
-  }
-}
-void disableFuelSchedule(uint8_t channel)
-{
-  switch(channel)
-  {
-    default:
-    case 0: disableSchedule(fuelSchedule1); break;
-    case 1: disableSchedule(fuelSchedule2); break;
-    case 2: disableSchedule(fuelSchedule3); break;
-    case 3: disableSchedule(fuelSchedule4); break;
-#if (INJ_CHANNELS >= 5)
-    case 4: disableSchedule(fuelSchedule5); break;
-#endif
-#if (INJ_CHANNELS >= 6)
-    case 5: disableSchedule(fuelSchedule6); break;
-#endif
-#if (INJ_CHANNELS >= 7)
-    case 6: disableSchedule(fuelSchedule7); break;
-#endif
-#if (INJ_CHANNELS >= 8)
-    case 7: disableSchedule(fuelSchedule8); break;
-#endif
-  }
-}
-void disableIgnSchedule(uint8_t channel)
-{
-  switch(channel)
-  {
-    default:
-    case 0: disableSchedule(ignitionSchedule1); break;
-    case 1: disableSchedule(ignitionSchedule2); break;
-    case 2: disableSchedule(ignitionSchedule3); break;
-    case 3: disableSchedule(ignitionSchedule4); break;
-    case 4: disableSchedule(ignitionSchedule5); break;
-#if IGN_CHANNELS >= 6      
-    case 5: disableSchedule(ignitionSchedule6); break;
-#endif
-#if IGN_CHANNELS >= 7      
-    case 6: disableSchedule(ignitionSchedule7); break;
-#endif
-#if IGN_CHANNELS >= 8      
-    case 7: disableSchedule(ignitionSchedule8); break;
-#endif
-  }
-}
-
-void disableAllFuelSchedules(void)
-{
-  disableFuelSchedule(0);
-  disableFuelSchedule(1);
-  disableFuelSchedule(2);
-  disableFuelSchedule(3);
-  disableFuelSchedule(4);
-  disableFuelSchedule(5);
-  disableFuelSchedule(6);
-  disableFuelSchedule(7);
-}
-void disableAllIgnSchedules(void)
-{
-  disableIgnSchedule(0);
-  disableIgnSchedule(1);
-  disableIgnSchedule(2);
-  disableIgnSchedule(3);
-  disableIgnSchedule(4);
-  disableIgnSchedule(5);
-  disableIgnSchedule(6);
-  disableIgnSchedule(7);
 }

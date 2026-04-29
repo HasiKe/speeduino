@@ -9,8 +9,7 @@
 #include "comms.h"
 #include "comms_secondary.h"
 #include "comms_CAN.h"
-#include "utilities.h"
-#include "scheduledIO.h"
+#include "programmableIOControl.h"
 #include "scheduler.h"
 #include "schedule_calcs.h"
 #include "auxiliaries.h"
@@ -21,19 +20,68 @@
 #include "table2d.h"
 #include "acc_mc33810.h"
 #include "board_definition.h"
-#if defined(EEPROM_RESET_PIN)
-  #include EEPROM_LIB_H
-#endif
+#include "pages.h"
 #ifdef SD_LOGGING
   #include "SD_logger.h"
   #include "rtc_common.h"
 #endif
 #include "fuel_calcs.h"
+#include "decoder_init.h"
+#include "scheduledIO_ign.h"
+#include "scheduledIO_inj.h"
+#include "scheduledIO_direct_ign.h"
+#include "scheduledIO_direct_inj.h"
+#include "src/pins/pinMapping.h"
+#include "resetControl.h"
 
 #if defined(CORE_AVR)
 #pragma GCC push_options
 // This minimizes RAM usage at no performance cost
 #pragma GCC optimize ("Os") 
+#endif
+
+///
+/// @brief Allow the user to reset the firmware storage (aka EPROM).
+///
+/// This gives the user the opportunity to clear the permanent storage
+/// at start up. 
+///
+/// See https://github.com/noisymime/speeduino/pull/657
+///
+#if !defined(UNIT_TEST)
+static void processResetStorageRequest(void) {
+#if defined(EEPROM_RESET_PIN)
+
+  constexpr uint32_t START_RESET_INTERVAL = MILLI_PER_SEC+50;
+  constexpr uint32_t MIN_BUTTON_PRESSED_INTERVAL = MILLI_PER_SEC/2;
+  constexpr uint32_t MAX_BUTTON_RELEASE_INTERVAL = MILLI_PER_SEC;
+  
+  uint32_t start_time = millis();
+  bool exit_erase_loop = false; 
+  pinMode(EEPROM_RESET_PIN, INPUT_PULLUP);  
+
+  //only start routine when this pin is low because it is pulled low
+  while (digitalRead(EEPROM_RESET_PIN) != HIGH && (millis() - start_time)<START_RESET_INTERVAL)
+  {
+    //make sure the key is pressed for at least 0.5 second 
+    if ((millis() - start_time)>(MIN_BUTTON_PRESSED_INTERVAL)) {
+      //if key is pressed afterboot for 0.5 second make led turn off
+      digitalWrite(LED_BUILTIN, HIGH);
+
+      //see if the user reacts to the led turned off with removing the keypress within 1 second
+      while (((millis() - start_time)<MAX_BUTTON_RELEASE_INTERVAL) && (exit_erase_loop!=true)){
+
+        //if user let go of key within 1 second erase eeprom
+        if(digitalRead(EEPROM_RESET_PIN) != LOW){
+          fillBlock(getStorageAPI(), 0, getStorageAPI().length(), UINT8_MAX);
+          //if erase done exit while loop.
+          exit_erase_loop = true;
+        }
+      }
+    } 
+  }
+#endif
+}
 #endif
 
 /** Initialise Speeduino for the main loop.
@@ -69,48 +117,14 @@ void initialiseAll(void)
     //STM32 can not currently enabled
     #endif
 
-    /*
-    ***********************************************************************************************************
-    * EEPROM reset
-    */
-    #if defined(EEPROM_RESET_PIN) && !defined(UNIT_TEST)
-    uint32_t start_time = millis();
-    byte exit_erase_loop = false; 
-    pinMode(EEPROM_RESET_PIN, INPUT_PULLUP);  
-
-    //only start routine when this pin is low because it is pulled low
-    while (digitalRead(EEPROM_RESET_PIN) != HIGH && (millis() - start_time)<1050)
-    {
-      //make sure the key is pressed for at least 0.5 second 
-      if ((millis() - start_time)>500) {
-        //if key is pressed afterboot for 0.5 second make led turn off
-        digitalWrite(LED_BUILTIN, HIGH);
-
-        //see if the user reacts to the led turned off with removing the keypress within 1 second
-        while (((millis() - start_time)<1000) && (exit_erase_loop!=true)){
-
-          //if user let go of key within 1 second erase eeprom
-          if(digitalRead(EEPROM_RESET_PIN) != LOW){
-            #if defined(FLASH_AS_EEPROM_h)
-              EEPROM.read(0); //needed for SPI eeprom emulation.
-              EEPROM.clear(); 
-            #else 
-              for (int i = 0 ; i < EEPROM.length() ; i++) { EEPROM.write(i, 255);}
-            #endif
-            //if erase done exit while loop.
-            exit_erase_loop = true;
-          }
-        }
-      } 
-    }
-    #endif
-  
     // Unit tests should be independent of any stored configuration on the board!
 #if !defined(UNIT_TEST)
-    loadConfig();
+    setStorageAPI(getBoardStorageApi());
+    processResetStorageRequest();
+    loadAllPages();
+    loadAllCalibrationTables(); 
     doUpdates(); //Check if any data items need updating (Occurs with firmware updates)
 #endif
-
 
     //Always start with a clean slate on the bootloader capabilities level
     //This should be 0 until we hear otherwise from the 16u2
@@ -126,15 +140,13 @@ void initialiseAll(void)
 
     pPrimarySerial = &Serial; //Default to standard Serial interface
     currentStatus.allowLegacyComms = true; //Flag legacy comms as being allowed on startup
-    
-    //Setup the calibration tables
-    loadCalibration();   
 
     //Set the pin mappings
     if((configPage2.pinMapping == 255) || (configPage2.pinMapping == 0)) //255 = EEPROM value in a blank AVR; 0 = EEPROM value in new FRAM
     {
       //First time running on this board
-      resetConfigPages();
+      setTuneToEmpty();
+      configPage4.triggerTeeth = 4; //Avoiddiv by 0 when start decoders
       setPinMapping(3); //Force board to v0.4
     }
     else { setPinMapping(configPage2.pinMapping); }
@@ -187,21 +199,16 @@ void initialiseAll(void)
     initialiseIgnitionSchedulers();
     //initialiseDisplay();
     initialiseIdle(true);
-    initialiseFan();
+    initialiseFan(pinFan);
     initialiseAirCon();
     initialiseAuxPWM();
     initialiseCorrections();
-    currentStatus.engineProtectIoError = false; //Clear the I/O error bit. The bit will be set in initialiseADC() if there is problem in there.
+    currentStatus.ioError = false; //Clear the I/O error bit. The bit will be set in initialiseADC() if there is problem in there.
     initialiseADC();
     initialiseMAPBaro();
-    initialiseProgrammableIO();
+    initialiseProgrammableIO(currentStatus, configPage13);
+    initialiseFlexSensor(configPage2, currentStatus, pinFlex);
 
-    //Check whether the flex sensor is enabled and if so, attach an interrupt for it
-    if(configPage2.flexEnabled > 0)
-    {
-      if(!pinIsReserved(pinFlex)) { attachInterrupt(digitalPinToInterrupt(pinFlex), flexPulse, CHANGE); }
-      currentStatus.ethanolPct = 0;
-    }
     //Same as above, but for the VSS input
     if (isExternalVssMode(configPage2)) // VSS modes 2 and 3 are interrupt drive (Mode 1 is CAN)
     {
@@ -240,19 +247,21 @@ void initialiseAll(void)
     currentStatus.launchingHard = false;
     currentStatus.crankRPM = ((unsigned int)configPage4.crankRPM * 10); //Crank RPM limit (Saves us calculating this over and over again. It's updated once per second in timers.ino)
     currentStatus.fuelPumpOn = false;
-    resetEngineProtect(currentStatus);
-    triggerFilterTime = 0; //Trigger filter time is the shortest possible time (in uS) that there can be between crank teeth (ie at max RPM). Any pulses that occur faster than this time will be discarded as noise. This is simply a default value, the actual values are set in the setup() functions of each decoder
+    currentStatus.engineProtect.reset();
     dwellLimit_uS = (1000 * configPage4.dwellLimit);
     fpPrimeTime = 0;
     ms_counter = 0;
     fixedCrankingOverride = 0;
     timer5_overflow_count = 0;
     toothHistoryIndex = 0;
-    resetDecoder();
     
     noInterrupts();
-    initialiseTriggers();
-
+    currentStatus.decoder = buildDecoder(configPage4.TrigPattern);
+    boardInitPins();
+    // The schedulers are all configured & pins are mapped - so start the schedulers
+    startIgnitionSchedulers();
+    startFuelSchedulers();
+    
     //The secondary input can be used for VSS if nothing else requires it. Allows for the standard VR conditioner to be used for VSS. This MUST be run after the initialiseTriggers() function
     if( VSS_USES_RPM2() ) { attachInterrupt(digitalPinToInterrupt(pinVSS), vssPulse, RISING); } //Secondary trigger input can safely be used for VSS
     if( FLEX_USES_RPM2() ) { attachInterrupt(digitalPinToInterrupt(pinFlex), flexPulse, CHANGE); } //Secondary trigger input can safely be used for Flex sensor
@@ -929,9 +938,6 @@ void initialiseAll(void)
           //Wasted COP mode for 4 cylinders. Ignition channels 1&3 and 2&4 are paired together
           setCallbacks(ignitionSchedule1, beginCoil1and3Charge, endCoil1and3Charge);
           setCallbacks(ignitionSchedule2, beginCoil2and4Charge, endCoil2and4Charge);
-
-          setCallbacks(ignitionSchedule3, nullCallback, nullCallback);
-          setCallbacks(ignitionSchedule4, nullCallback, nullCallback);
         }
         else if( configPage2.nCylinders == 6 )
         {
@@ -939,12 +945,6 @@ void initialiseAll(void)
           setCallbacks(ignitionSchedule1, beginCoil1and4Charge, endCoil1and4Charge);
           setCallbacks(ignitionSchedule2, beginCoil2and5Charge, endCoil2and5Charge);
           setCallbacks(ignitionSchedule3, beginCoil3and6Charge, endCoil3and6Charge);
-
-          setCallbacks(ignitionSchedule4, nullCallback, nullCallback);
-          setCallbacks(ignitionSchedule5, nullCallback, nullCallback);
-#if IGN_CHANNELS >= 6
-          setCallbacks(ignitionSchedule6, nullCallback, nullCallback);
-#endif
         }
         else if( configPage2.nCylinders == 8 )
         {
@@ -953,17 +953,6 @@ void initialiseAll(void)
           setCallbacks(ignitionSchedule2, beginCoil2and6Charge, endCoil2and6Charge);
           setCallbacks(ignitionSchedule3, beginCoil3and7Charge, endCoil3and7Charge);
           setCallbacks(ignitionSchedule4, beginCoil4and8Charge, endCoil4and8Charge);
-
-          setCallbacks(ignitionSchedule5, nullCallback, nullCallback);
-#if IGN_CHANNELS >= 6
-          setCallbacks(ignitionSchedule6, nullCallback, nullCallback);
-#endif
-#if IGN_CHANNELS >= 7
-          setCallbacks(ignitionSchedule7, nullCallback, nullCallback);
-#endif
-#if IGN_CHANNELS >= 8
-          setCallbacks(ignitionSchedule8, nullCallback, nullCallback);
-#endif
         }
         else
         {
@@ -1043,13 +1032,7 @@ void initialiseAll(void)
         break;
     }
 
-    //Begin priming the fuel pump. This is turned off in the low resolution, 1s interrupt in timers.ino
-    //First check that the priming time is not 0
-    if(configPage2.fpPrime > 0)
-    {
-      FUEL_PUMP_ON();
-    }
-    else { currentStatus.fpPrimed = true; } //If the user has set 0 for the pump priming, immediately mark the priming as being completed
+    currentStatus.fpPrimed = initialiseFuelPump(configPage2, pinFuelPump);
 
     interrupts();
     initialiseCLT();
@@ -2778,25 +2761,17 @@ void setPinMapping(byte boardID)
     if (configPage4.resetControlPin!=0U) {
       pinResetControl = pinTranslate(configPage4.resetControlPin);
     }
-    resetControl = configPage4.resetControlConfig;
-    setResetControlPinState();
-    pinMode(pinResetControl, OUTPUT);
+    initialiseResetControl(currentStatus, configPage4.resetControlConfig, pinResetControl);
   }
   
 
   //Finally, set the relevant pin modes for outputs
-  pinMode(pinTachOut, OUTPUT);
   pinMode(pinIdle1, OUTPUT);
   pinMode(pinIdle2, OUTPUT);
   pinMode(pinIdleUpOutput, OUTPUT);
-  pinMode(pinFuelPump, OUTPUT);
-  pinMode(pinFan, OUTPUT);
   pinMode(pinStepperDir, OUTPUT);
   pinMode(pinStepperStep, OUTPUT);
   pinMode(pinStepperEnable, OUTPUT);
-  pinMode(pinBoost, OUTPUT);
-  pinMode(pinVVT_1, OUTPUT);
-  pinMode(pinVVT_2, OUTPUT);
   if(configPage4.ignBypassEnabled > 0) { pinMode(pinIgnBypass, OUTPUT); }
 
   //This is a legacy mode option to revert the MAP reading behaviour to match what was in place prior to the 201905 firmware
@@ -2804,76 +2779,60 @@ void setPinMapping(byte boardID)
 
   if(ignitionOutputControl == OUTPUT_CONTROL_DIRECT)
   {
-    pinMode(pinCoil1, OUTPUT);
-    pinMode(pinCoil2, OUTPUT);
-    pinMode(pinCoil3, OUTPUT);
-    pinMode(pinCoil4, OUTPUT);
-    #if (IGN_CHANNELS >= 5)
-    pinMode(pinCoil5, OUTPUT);
-    #endif
-    #if (IGN_CHANNELS >= 6)
-    pinMode(pinCoil6, OUTPUT);
-    #endif
-    #if (IGN_CHANNELS >= 7)
-    pinMode(pinCoil7, OUTPUT);
-    #endif
-    #if (IGN_CHANNELS >= 8)
-    pinMode(pinCoil8, OUTPUT);
-    #endif
-
-    ign1_pin_port = portOutputRegister(digitalPinToPort(pinCoil1));
-    ign1_pin_mask = digitalPinToBitMask(pinCoil1);
-    ign2_pin_port = portOutputRegister(digitalPinToPort(pinCoil2));
-    ign2_pin_mask = digitalPinToBitMask(pinCoil2);
-    ign3_pin_port = portOutputRegister(digitalPinToPort(pinCoil3));
-    ign3_pin_mask = digitalPinToBitMask(pinCoil3);
-    ign4_pin_port = portOutputRegister(digitalPinToPort(pinCoil4));
-    ign4_pin_mask = digitalPinToBitMask(pinCoil4);
-    ign5_pin_port = portOutputRegister(digitalPinToPort(pinCoil5));
-    ign5_pin_mask = digitalPinToBitMask(pinCoil5);
-    ign6_pin_port = portOutputRegister(digitalPinToPort(pinCoil6));
-    ign6_pin_mask = digitalPinToBitMask(pinCoil6);
-    ign7_pin_port = portOutputRegister(digitalPinToPort(pinCoil7));
-    ign7_pin_mask = digitalPinToBitMask(pinCoil7);
-    ign8_pin_port = portOutputRegister(digitalPinToPort(pinCoil8));
-    ign8_pin_mask = digitalPinToBitMask(pinCoil8);
+    uint8_t ignPins[IGN_CHANNELS] = {
+      pinCoil1,
+      #if (IGN_CHANNELS >= 2)
+      pinCoil2,
+      #endif
+      #if (IGN_CHANNELS >= 3)
+      pinCoil3,
+      #endif
+      #if (IGN_CHANNELS >= 4)
+      pinCoil4,
+      #endif
+      #if (IGN_CHANNELS >= 5)
+      pinCoil5,
+      #endif
+      #if (IGN_CHANNELS >= 6)
+      pinCoil6,
+      #endif
+      #if (IGN_CHANNELS >= 7)
+      pinCoil7,
+      #endif
+      #if (IGN_CHANNELS >= 8)
+      pinCoil8,
+      #endif
+    };
+    initIgnDirectIO(ignPins);
   } 
 
   if(injectorOutputControl == OUTPUT_CONTROL_DIRECT)
   {
-    pinMode(pinInjector1, OUTPUT);
-    pinMode(pinInjector2, OUTPUT);
-    pinMode(pinInjector3, OUTPUT);
-    pinMode(pinInjector4, OUTPUT);
-    #if (INJ_CHANNELS >= 5)
-    pinMode(pinInjector5, OUTPUT);
-    #endif
-    #if (INJ_CHANNELS >= 6)
-    pinMode(pinInjector6, OUTPUT);
-    #endif
-    #if (INJ_CHANNELS >= 7)
-    pinMode(pinInjector7, OUTPUT);
-    #endif
-    #if (INJ_CHANNELS >= 8)
-    pinMode(pinInjector8, OUTPUT);
-    #endif
-
-    inj1_pin_port = portOutputRegister(digitalPinToPort(pinInjector1));
-    inj1_pin_mask = digitalPinToBitMask(pinInjector1);
-    inj2_pin_port = portOutputRegister(digitalPinToPort(pinInjector2));
-    inj2_pin_mask = digitalPinToBitMask(pinInjector2);
-    inj3_pin_port = portOutputRegister(digitalPinToPort(pinInjector3));
-    inj3_pin_mask = digitalPinToBitMask(pinInjector3);
-    inj4_pin_port = portOutputRegister(digitalPinToPort(pinInjector4));
-    inj4_pin_mask = digitalPinToBitMask(pinInjector4);
-    inj5_pin_port = portOutputRegister(digitalPinToPort(pinInjector5));
-    inj5_pin_mask = digitalPinToBitMask(pinInjector5);
-    inj6_pin_port = portOutputRegister(digitalPinToPort(pinInjector6));
-    inj6_pin_mask = digitalPinToBitMask(pinInjector6);
-    inj7_pin_port = portOutputRegister(digitalPinToPort(pinInjector7));
-    inj7_pin_mask = digitalPinToBitMask(pinInjector7);
-    inj8_pin_port = portOutputRegister(digitalPinToPort(pinInjector8));
-    inj8_pin_mask = digitalPinToBitMask(pinInjector8);
+    uint8_t injPins[INJ_CHANNELS] = {
+      pinInjector1,
+      #if (INJ_CHANNELS >= 2)
+      pinInjector2,
+      #endif
+      #if (INJ_CHANNELS >= 3)
+      pinInjector3,
+      #endif
+      #if (INJ_CHANNELS >= 4)
+      pinInjector4,
+      #endif
+      #if (INJ_CHANNELS >= 5)
+      pinInjector5,
+      #endif
+      #if (INJ_CHANNELS >= 6)
+      pinInjector6,
+      #endif
+      #if (INJ_CHANNELS >= 7)
+      pinInjector7,
+      #endif
+      #if (INJ_CHANNELS >= 8)
+      pinInjector8,
+      #endif
+    };
+    initInjDirectIO(injPins);
   }
   
   if( (ignitionOutputControl == OUTPUT_CONTROL_MC33810) || (injectorOutputControl == OUTPUT_CONTROL_MC33810) )
@@ -2888,10 +2847,7 @@ void setPinMapping(byte boardID)
 //   EEPROM.begin(USE_SPI_EEPROM);
 // #endif
 
-  tach_pin_port = portOutputRegister(digitalPinToPort(pinTachOut));
-  tach_pin_mask = digitalPinToBitMask(pinTachOut);
-  pump_pin_port = portOutputRegister(digitalPinToPort(pinFuelPump));
-  pump_pin_mask = digitalPinToBitMask(pinFuelPump);
+  initTacho(pinTachOut);
 
   //And for inputs
   #if defined(CORE_STM32)
@@ -2927,10 +2883,6 @@ void setPinMapping(byte boardID)
   #endif
 
   //Each of the below are only set when their relevant function is enabled. This can help prevent pin conflicts that users aren't aware of with unused functions
-  if( (configPage2.flexEnabled > 0) && (!pinIsOutput(pinFlex)) )
-  {
-    pinMode(pinFlex, INPUT); //Standard GM / Continental flex sensor requires pullup, but this should be onboard. The internal pullup will not work (Requires ~3.3k)!
-  }
   if( isExternalVssMode(configPage2) && (!pinIsOutput(pinVSS)) ) //Pin mode 1 for VSS is CAN
   {
     pinMode(pinVSS, INPUT);
@@ -2986,638 +2938,14 @@ void setPinMapping(byte boardID)
       else { pinMode(pinWMIEmpty, INPUT); } //inverted setting
     }
   } 
-
-  if((pinAirConComp>0) && ((configPage15.airConEnable) == 1))
-  {
-    pinMode(pinAirConComp, OUTPUT);
-  }
-
-  if((pinAirConRequest > 0) && ((configPage15.airConEnable) == 1) && (!pinIsOutput(pinAirConRequest)))
-  {
-    if((configPage15.airConReqPol) == 1)
-    {
-      // Inverted
-      // +5V is ON, Use external pull-down resistor for OFF
-      pinMode(pinAirConRequest, INPUT);
-    }
-    else
-    {
-      //Normal
-      // Pin pulled to Ground is ON. Floating (internally pulled up to +5V) is OFF.
-      pinMode(pinAirConRequest, INPUT_PULLUP);
-    }
-  }
-
-  if((pinAirConFan > 0) && ((configPage15.airConEnable) == 1) && ((configPage15.airConFanEnabled) == 1))
-  {
-    pinMode(pinAirConFan, OUTPUT);
-  }  
-
-  //These must come after the above pinMode statements
-  triggerPri_pin_port = portInputRegister(digitalPinToPort(pinTrigger));
-  triggerPri_pin_mask = digitalPinToBitMask(pinTrigger);
-  triggerSec_pin_port = portInputRegister(digitalPinToPort(pinTrigger2));
-  triggerSec_pin_mask = digitalPinToBitMask(pinTrigger2);
-  triggerThird_pin_port = portInputRegister(digitalPinToPort(pinTrigger3));
-  triggerThird_pin_mask = digitalPinToBitMask(pinTrigger3);
-
-  flex_pin_port = portInputRegister(digitalPinToPort(pinFlex));
-  flex_pin_mask = digitalPinToBitMask(pinFlex);
-
 }
+
 /** Initialise the chosen trigger decoder.
  * - Set Interrupt numbers @ref triggerInterrupt, @ref triggerInterrupt2 and @ref triggerInterrupt3  by pin their numbers (based on board CORE_* define)
  * - Call decoder specific setup function triggerSetup_*() (by @ref config4.TrigPattern, set to one of the DECODER_* defines) and do any additional initialisations needed.
  * 
  * @todo Explain why triggerSetup_*() alone cannot do all the setup, but there's ~10+ lines worth of extra init for each of decoders.
  */
-void initialiseTriggers(void)
-{
-  byte triggerInterrupt = 0; // By default, use the first interrupt
-  byte triggerInterrupt2 = 1;
-  byte triggerInterrupt3 = 2;
-
-  #if defined(CORE_AVR)
-    switch (pinTrigger) {
-      //Arduino Mega 2560 mapping
-      case 2:
-        triggerInterrupt = 0; break;
-      case 3:
-        triggerInterrupt = 1; break;
-      case 18:
-        triggerInterrupt = 5; break;
-      case 19:
-        triggerInterrupt = 4; break;
-      case 20:
-        triggerInterrupt = 3; break;
-      case 21:
-        triggerInterrupt = 2; break;
-      default:
-        triggerInterrupt = 0; break; //This should NEVER happen
-    }
-  #else
-    triggerInterrupt = pinTrigger;
-  #endif
-
-  #if defined(CORE_AVR)
-    switch (pinTrigger2) {
-      //Arduino Mega 2560 mapping
-      case 2:
-        triggerInterrupt2 = 0; break;
-      case 3:
-        triggerInterrupt2 = 1; break;
-      case 18:
-        triggerInterrupt2 = 5; break;
-      case 19:
-        triggerInterrupt2 = 4; break;
-      case 20:
-        triggerInterrupt2 = 3; break;
-      case 21:
-        triggerInterrupt2 = 2; break;
-      default:
-        triggerInterrupt2 = 0; break; //This should NEVER happen
-    }
-  #else
-    triggerInterrupt2 = pinTrigger2;
-  #endif
-
-  #if defined(CORE_AVR)
-    switch (pinTrigger3) {
-      //Arduino Mega 2560 mapping
-      case 2:
-        triggerInterrupt3 = 0; break;
-      case 3:
-        triggerInterrupt3 = 1; break;
-      case 18:
-        triggerInterrupt3 = 5; break;
-      case 19:
-        triggerInterrupt3 = 4; break;
-      case 20:
-        triggerInterrupt3 = 3; break;
-      case 21:
-        triggerInterrupt3 = 2; break;
-      default:
-        triggerInterrupt3 = 0; break; //This should NEVER happen
-    }
-  #else
-    triggerInterrupt3 = pinTrigger3;
-  #endif
-
-  pinMode(pinTrigger, INPUT);
-  pinMode(pinTrigger2, INPUT);
-  pinMode(pinTrigger3, INPUT);
-
-  detachInterrupt(triggerInterrupt);
-  detachInterrupt(triggerInterrupt2);
-  detachInterrupt(triggerInterrupt3);
-  //The default values for edges
-  primaryTriggerEdge = 0; //This should ALWAYS be changed below
-  secondaryTriggerEdge = 0; //This is optional and may not be changed below, depending on the decoder in use
-  tertiaryTriggerEdge = 0; //This is even more optional and may not be changed below, depending on the decoder in use
-
-  //Set the trigger function based on the decoder in the config
-  switch (configPage4.TrigPattern)
-  {
-    case DECODER_MISSING_TOOTH:
-      //Missing tooth decoder
-      triggerSetup_missingTooth();
-      triggerHandler = triggerPri_missingTooth;
-      triggerSecondaryHandler = triggerSec_missingTooth;
-      triggerTertiaryHandler = triggerThird_missingTooth;
-      
-      getRPM = getRPM_missingTooth;
-      getCrankAngle = getCrankAngle_missingTooth;
-      triggerSetEndTeeth = triggerSetEndTeeth_missingTooth;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-      if(configPage10.TrigEdgeThrd == 0) { tertiaryTriggerEdge = RISING; }
-      else { tertiaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-
-      if(BIT_CHECK(decoderState, BIT_DECODER_HAS_SECONDARY)) { attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge); }
-      if(configPage10.vvt2Enabled > 0) { attachInterrupt(triggerInterrupt3, triggerTertiaryHandler, tertiaryTriggerEdge); } // we only need this for vvt2, so not really needed if it's not used
-
-      break;
-
-    case DECODER_BASIC_DISTRIBUTOR:
-      // Basic distributor
-      triggerSetup_BasicDistributor();
-      triggerHandler = triggerPri_BasicDistributor;
-      getRPM = getRPM_BasicDistributor;
-      getCrankAngle = getCrankAngle_BasicDistributor;
-      triggerSetEndTeeth = triggerSetEndTeeth_BasicDistributor;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      break;
-
-    case 2:
-      triggerSetup_DualWheel();
-      triggerHandler = triggerPri_DualWheel;
-      triggerSecondaryHandler = triggerSec_DualWheel;
-      getRPM = getRPM_DualWheel;
-      getCrankAngle = getCrankAngle_DualWheel;
-      triggerSetEndTeeth = triggerSetEndTeeth_DualWheel;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_GM7X:
-      triggerSetup_GM7X();
-      triggerHandler = triggerPri_GM7X;
-      getRPM = getRPM_GM7X;
-      getCrankAngle = getCrankAngle_GM7X;
-      triggerSetEndTeeth = triggerSetEndTeeth_GM7X;
-
-      if(configPage4.TrigEdge == 0) { attachInterrupt(triggerInterrupt, triggerHandler, RISING); } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { attachInterrupt(triggerInterrupt, triggerHandler, FALLING); }
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      break;
-
-    case DECODER_4G63:
-      triggerSetup_4G63();
-      triggerHandler = triggerPri_4G63;
-      triggerSecondaryHandler = triggerSec_4G63;
-      getRPM = getRPM_4G63;
-      getCrankAngle = getCrankAngle_4G63;
-      triggerSetEndTeeth = triggerSetEndTeeth_4G63;
-
-      primaryTriggerEdge = CHANGE;
-      secondaryTriggerEdge = FALLING;
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_24X:
-      triggerSetup_24X();
-      triggerHandler = triggerPri_24X;
-      triggerSecondaryHandler = triggerSec_24X;
-      getRPM = getRPM_24X;
-      getCrankAngle = getCrankAngle_24X;
-      triggerSetEndTeeth = triggerSetEndTeeth_24X;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = CHANGE; //Secondary is always on every change
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_JEEP2000:
-      triggerSetup_Jeep2000();
-      triggerHandler = triggerPri_Jeep2000;
-      triggerSecondaryHandler = triggerSec_Jeep2000;
-      getRPM = getRPM_Jeep2000;
-      getCrankAngle = getCrankAngle_Jeep2000;
-      triggerSetEndTeeth = triggerSetEndTeeth_Jeep2000;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = CHANGE;
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_AUDI135:
-      triggerSetup_Audi135();
-      triggerHandler = triggerPri_Audi135;
-      triggerSecondaryHandler = triggerSec_Audi135;
-      getRPM = getRPM_Audi135;
-      getCrankAngle = getCrankAngle_Audi135;
-      triggerSetEndTeeth = triggerSetEndTeeth_Audi135;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = RISING; //always rising for this trigger
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_HONDA_D17:
-      triggerSetup_HondaD17();
-      triggerHandler = triggerPri_HondaD17;
-      triggerSecondaryHandler = triggerSec_HondaD17;
-      getRPM = getRPM_HondaD17;
-      getCrankAngle = getCrankAngle_HondaD17;
-      triggerSetEndTeeth = triggerSetEndTeeth_HondaD17;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = CHANGE;
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_HONDA_J32:
-      triggerSetup_HondaJ32();
-      triggerHandler = triggerPri_HondaJ32;
-      triggerSecondaryHandler = triggerSec_HondaJ32;
-      getRPM = getRPM_HondaJ32;
-      getCrankAngle = getCrankAngle_HondaJ32;
-      triggerSetEndTeeth = triggerSetEndTeeth_HondaJ32;
-
-      primaryTriggerEdge = RISING; // Don't honor the config, always use rising edge 
-      secondaryTriggerEdge = RISING; // Unused
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);  // Suspect this line is not needed
-      break;
-
-    case DECODER_MIATA_9905:
-      triggerSetup_Miata9905();
-      triggerHandler = triggerPri_Miata9905;
-      triggerSecondaryHandler = triggerSec_Miata9905;
-      getRPM = getRPM_Miata9905;
-      getCrankAngle = getCrankAngle_Miata9905;
-      triggerSetEndTeeth = triggerSetEndTeeth_Miata9905;
-
-      //These may both need to change, not sure
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_MAZDA_AU:
-      triggerSetup_MazdaAU();
-      triggerHandler = triggerPri_MazdaAU;
-      triggerSecondaryHandler = triggerSec_MazdaAU;
-      getRPM = getRPM_MazdaAU;
-      getCrankAngle = getCrankAngle_MazdaAU;
-      triggerSetEndTeeth = triggerSetEndTeeth_MazdaAU;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = FALLING;
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_NON360:
-      triggerSetup_non360();
-      triggerHandler = triggerPri_DualWheel; //Is identical to the dual wheel decoder, so that is used. Same goes for the secondary below
-      triggerSecondaryHandler = triggerSec_DualWheel; //Note the use of the Dual Wheel trigger function here. No point in having the same code in twice.
-      getRPM = getRPM_non360;
-      getCrankAngle = getCrankAngle_non360;
-      triggerSetEndTeeth = triggerSetEndTeeth_non360;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = FALLING;
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_NISSAN_360:
-      triggerSetup_Nissan360();
-      triggerHandler = triggerPri_Nissan360;
-      triggerSecondaryHandler = triggerSec_Nissan360;
-      getRPM = getRPM_Nissan360;
-      getCrankAngle = getCrankAngle_Nissan360;
-      triggerSetEndTeeth = triggerSetEndTeeth_Nissan360;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = CHANGE;
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_SUBARU_67:
-      triggerSetup_Subaru67();
-      triggerHandler = triggerPri_Subaru67;
-      triggerSecondaryHandler = triggerSec_Subaru67;
-      getRPM = getRPM_Subaru67;
-      getCrankAngle = getCrankAngle_Subaru67;
-      triggerSetEndTeeth = triggerSetEndTeeth_Subaru67;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = FALLING;
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_DAIHATSU_PLUS1:
-      triggerSetup_Daihatsu();
-      triggerHandler = triggerPri_Daihatsu;
-      getRPM = getRPM_Daihatsu;
-      getCrankAngle = getCrankAngle_Daihatsu;
-      triggerSetEndTeeth = triggerSetEndTeeth_Daihatsu;
-
-      //No secondary input required for this pattern
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      break;
-
-    case DECODER_HARLEY:
-      triggerSetup_Harley();
-      triggerHandler = triggerPri_Harley;
-      //triggerSecondaryHandler = triggerSec_Harley;
-      getRPM = getRPM_Harley;
-      getCrankAngle = getCrankAngle_Harley;
-      triggerSetEndTeeth = triggerSetEndTeeth_Harley;
-
-      primaryTriggerEdge = RISING; //Always rising
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      break;
-
-    case DECODER_36_2_2_2:
-      //36-2-2-2
-      triggerSetup_ThirtySixMinus222();
-      triggerHandler = triggerPri_ThirtySixMinus222;
-      triggerSecondaryHandler = triggerSec_ThirtySixMinus222;
-      getRPM = getRPM_ThirtySixMinus222;
-      getCrankAngle = getCrankAngle_missingTooth; //This uses the same function as the missing tooth decoder, so no need to duplicate code
-      triggerSetEndTeeth = triggerSetEndTeeth_ThirtySixMinus222;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_36_2_1:
-      //36-2-1
-      triggerSetup_ThirtySixMinus21();
-      triggerHandler = triggerPri_ThirtySixMinus21;
-      triggerSecondaryHandler = triggerSec_missingTooth;
-      getRPM = getRPM_ThirtySixMinus21;
-      getCrankAngle = getCrankAngle_missingTooth; //This uses the same function as the missing tooth decoder, so no need to duplicate code
-      triggerSetEndTeeth = triggerSetEndTeeth_ThirtySixMinus21;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_420A:
-      //DSM 420a
-      triggerSetup_420a();
-      triggerHandler = triggerPri_420a;
-      triggerSecondaryHandler = triggerSec_420a;
-      getRPM = getRPM_420a;
-      getCrankAngle = getCrankAngle_420a;
-      triggerSetEndTeeth = triggerSetEndTeeth_420a;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      secondaryTriggerEdge = FALLING; //Always falling edge
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_WEBER:
-      //Weber-Marelli
-      triggerSetup_DualWheel();
-      triggerHandler = triggerPri_Webber;
-      triggerSecondaryHandler = triggerSec_Webber;
-      getRPM = getRPM_DualWheel;
-      getCrankAngle = getCrankAngle_DualWheel;
-      triggerSetEndTeeth = triggerSetEndTeeth_DualWheel;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_ST170:
-      //Ford ST170
-      triggerSetup_FordST170();
-      triggerHandler = triggerPri_missingTooth;
-      triggerSecondaryHandler = triggerSec_FordST170;
-      getRPM = getRPM_FordST170;
-      getCrankAngle = getCrankAngle_FordST170;
-      triggerSetEndTeeth = triggerSetEndTeeth_FordST170;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-
-      break;
-	  
-    case DECODER_DRZ400:
-      triggerSetup_DRZ400();
-      triggerHandler = triggerPri_DualWheel;
-      triggerSecondaryHandler = triggerSec_DRZ400;
-      getRPM = getRPM_DualWheel;
-      getCrankAngle = getCrankAngle_DualWheel;
-      triggerSetEndTeeth = triggerSetEndTeeth_DualWheel;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_NGC:
-      //Chrysler NGC - 4, 6 and 8 cylinder
-      triggerSetup_NGC();
-      triggerHandler = triggerPri_NGC;
-      getRPM = getRPM_NGC;
-      getCrankAngle = getCrankAngle_missingTooth;
-      triggerSetEndTeeth = triggerSetEndTeeth_NGC;
-
-      primaryTriggerEdge = CHANGE;
-      if (configPage2.nCylinders == 4) {
-        triggerSecondaryHandler = triggerSec_NGC4;
-        secondaryTriggerEdge = CHANGE;
-      }
-      else {
-        triggerSecondaryHandler = triggerSec_NGC68;
-        secondaryTriggerEdge = FALLING;
-      }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-    case DECODER_VMAX:
-      triggerSetup_Vmax();
-      triggerHandler = triggerPri_Vmax;
-      getRPM = getRPM_Vmax;
-      getCrankAngle = getCrankAngle_Vmax;
-      triggerSetEndTeeth = triggerSetEndTeeth_Vmax;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = true; } // set as boolean so we can directly use it in decoder.
-      else { primaryTriggerEdge = false; }
-      
-      attachInterrupt(triggerInterrupt, triggerHandler, CHANGE); //Hardcoded change, the primaryTriggerEdge will be used in the decoder to select if it`s an inverted or non-inverted signal.
-      break;
-
-    case DECODER_RENIX:
-      //Renault 44 tooth decoder
-      triggerSetup_Renix();
-      triggerHandler = triggerPri_Renix;
-      getRPM = getRPM_missingTooth;
-      getCrankAngle = getCrankAngle_missingTooth;
-      triggerSetEndTeeth = triggerSetEndTeeth_Renix;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt 
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      break;
-
-    case DECODER_ROVERMEMS:
-      //Rover MEMs - covers multiple flywheel trigger combinations.
-      triggerSetup_RoverMEMS();
-      triggerHandler = triggerPri_RoverMEMS;
-      getRPM = getRPM_RoverMEMS;
-      triggerSetEndTeeth = triggerSetEndTeeth_RoverMEMS;
-            
-      triggerSecondaryHandler = triggerSec_RoverMEMS; 
-      getCrankAngle = getCrankAngle_missingTooth;   
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-      
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;   
-
-    case DECODER_SUZUKI_K6A:
-      triggerSetup_SuzukiK6A();
-      triggerHandler = triggerPri_SuzukiK6A; // only primary, no secondary, trigger pattern is over 720 degrees
-      getRPM = getRPM_SuzukiK6A;
-      getCrankAngle = getCrankAngle_SuzukiK6A;
-      triggerSetEndTeeth = triggerSetEndTeeth_SuzukiK6A;
-
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      break;
-
-      case DECODER_FORD_TFI:
-      // Ford TFI
-      triggerSetup_FordTFI();
-      triggerHandler = triggerPri_FordTFI;
-      triggerSecondaryHandler = triggerSec_FordTFI;
-      getRPM = getRPM_FordTFI;
-      getCrankAngle = getCrankAngle_FordTFI;
-      triggerSetEndTeeth = triggerSetEndTeeth_FordTFI;
-
-      if(configPage4.TrigEdge == 0) { primaryTriggerEdge = RISING; } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { primaryTriggerEdge = FALLING; }
-      if(configPage4.TrigEdgeSec == 0) { secondaryTriggerEdge = RISING; }
-      else { secondaryTriggerEdge = FALLING; }
-
-      attachInterrupt(triggerInterrupt, triggerHandler, primaryTriggerEdge);
-      attachInterrupt(triggerInterrupt2, triggerSecondaryHandler, secondaryTriggerEdge);
-      break;
-
-
-    default:
-      triggerHandler = triggerPri_missingTooth;
-      getRPM = getRPM_missingTooth;
-      getCrankAngle = getCrankAngle_missingTooth;
-
-      if(configPage4.TrigEdge == 0) { attachInterrupt(triggerInterrupt, triggerHandler, RISING); } // Attach the crank trigger wheel interrupt (Hall sensor drags to ground when triggering)
-      else { attachInterrupt(triggerInterrupt, triggerHandler, FALLING); }
-      break;
-  }
-
-  boardInitPins();
-  
-  // The schedulers are all configured & pins are mapped - so start the schedulers
-  startIgnitionSchedulers();
-  startFuelSchedulers();
-}
 
 static inline bool isAnyFuelScheduleRunning(void) {
   return isRunning(fuelSchedule1)

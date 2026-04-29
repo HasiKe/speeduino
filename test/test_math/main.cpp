@@ -1,4 +1,6 @@
-#include "../device_test_harness.h"
+#include "../test_harness_device.h"
+#include "../test_harness_native.h"
+
 
 void runAllMathTests(void)
 {
@@ -8,6 +10,7 @@ void runAllMathTests(void)
     extern void test_LOW_PASS_FILTER(void);
     extern void test_fast_map(void);
     extern void testUnitConversions(void);
+    extern void testOther(void);
 
     testCrankMaths();
     testPercent();
@@ -15,6 +18,7 @@ void runAllMathTests(void)
     test_LOW_PASS_FILTER();
     test_fast_map();
     testUnitConversions();
+    testOther();
 }
 
-DEVICE_TEST(runAllMathTests)
+TEST_HARNESS(runAllMathTests)

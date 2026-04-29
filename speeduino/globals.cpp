@@ -2,7 +2,6 @@
  * Instantiation of various (table2D, table3D) tables, volatile (interrupt modified) variables, Injector (1...8) enablement flags, etc.
  */
 #include "globals.h"
-#include "utilities.h"
 
 struct table3d16RpmLoad fuelTable; ///< 16x16 fuel map
 struct table3d16RpmLoad fuelTable2; ///< 16x16 fuel map
@@ -25,57 +24,6 @@ trimTable3d trim7Table; ///< 6x6 Fuel trim 7 map
 trimTable3d trim8Table; ///< 6x6 Fuel trim 8 map
 struct table3d4RpmLoad dwellTable; ///< 4x4 Dwell map
 
-
-/// volatile inj*_pin_port and  inj*_pin_mask vars are for the direct port manipulation of the injectors, coils and aux outputs.
-port_register_t inj1_pin_port;
-pin_mask_t inj1_pin_mask;
-port_register_t inj2_pin_port;
-pin_mask_t inj2_pin_mask;
-port_register_t inj3_pin_port;
-pin_mask_t inj3_pin_mask;
-port_register_t inj4_pin_port;
-pin_mask_t inj4_pin_mask;
-port_register_t inj5_pin_port;
-pin_mask_t inj5_pin_mask;
-port_register_t inj6_pin_port;
-pin_mask_t inj6_pin_mask;
-port_register_t inj7_pin_port;
-pin_mask_t inj7_pin_mask;
-port_register_t inj8_pin_port;
-pin_mask_t inj8_pin_mask;
-
-port_register_t ign1_pin_port;
-pin_mask_t ign1_pin_mask;
-port_register_t ign2_pin_port;
-pin_mask_t ign2_pin_mask;
-port_register_t ign3_pin_port;
-pin_mask_t ign3_pin_mask;
-port_register_t ign4_pin_port;
-pin_mask_t ign4_pin_mask;
-port_register_t ign5_pin_port;
-pin_mask_t ign5_pin_mask;
-port_register_t ign6_pin_port;
-pin_mask_t ign6_pin_mask;
-port_register_t ign7_pin_port;
-pin_mask_t ign7_pin_mask;
-port_register_t ign8_pin_port;
-pin_mask_t ign8_pin_mask;
-
-port_register_t tach_pin_port;
-pin_mask_t tach_pin_mask;
-port_register_t pump_pin_port;
-pin_mask_t pump_pin_mask;
-
-port_register_t flex_pin_port;
-pin_mask_t flex_pin_mask;
-
-port_register_t triggerPri_pin_port;
-pin_mask_t triggerPri_pin_mask;
-port_register_t triggerSec_pin_port;
-pin_mask_t triggerSec_pin_mask;
-port_register_t triggerThird_pin_port;
-pin_mask_t triggerThird_pin_mask;
-
 //These are variables used across multiple files
 byte fpPrimeTime = 0; ///< The time (in seconds, based on @ref statuses.secl) that the fuel pump started priming
 uint8_t softLimitTime = 0; //The time (in 0.1 seconds, based on seclx10) that the soft limiter started
@@ -90,15 +38,6 @@ volatile uint8_t compositeLogHistory[TOOTH_LOG_SIZE];
 volatile unsigned int toothHistoryIndex = 0; ///< Current index to @ref toothHistory array
 unsigned long currentLoopTime; /**< The time (in uS) that the current mainloop started */
 volatile uint16_t ignitionCount; /**< The count of ignition events that have taken place since the engine started */
-#if defined(CORE_SAMD21)
-  PinStatus primaryTriggerEdge;
-  PinStatus secondaryTriggerEdge;
-  PinStatus tertiaryTriggerEdge;
-#else
-  byte primaryTriggerEdge;
-  byte secondaryTriggerEdge;
-  byte tertiaryTriggerEdge;
-#endif
 int CRANK_ANGLE_MAX_IGN = 360;
 int CRANK_ANGLE_MAX_INJ = 360; ///< The number of crank degrees that the system track over. Typically 720 divided by the number of squirts per cycle (Eg 360 for wasted 2 squirt and 720 for sequential single squirt)
 volatile uint32_t runSecsX10;
@@ -107,9 +46,6 @@ volatile byte HWTest_INJ = 0; /**< Each bit in this variable represents one of t
 volatile byte HWTest_INJ_Pulsed = 0; /**< Each bit in this variable represents one of the injector channels and it's pulsed HW test status */
 volatile byte HWTest_IGN = 0; /**< Each bit in this variable represents one of the ignition channels and it's HW test status */
 volatile byte HWTest_IGN_Pulsed = 0; 
-
-//This needs to be here because using the config page directly can prevent burning the setting
-byte resetControl = RESET_CONTROL_DISABLED;
 
 volatile byte TIMER_mask;
 volatile byte LOOP_TIMER;

@@ -89,6 +89,9 @@ static constexpr conversionFactor<uint16_t, uint8_t> RPM_COARSE = { .scale=100U,
  */
 static constexpr conversionFactor<uint16_t, uint8_t> RPM_MEDIUM = { .scale=10U, .translate=0U };
 
+/** @see RPM_MEDIUM */
+static constexpr conversionFactor<int16_t, int8_t> SIGNED_RPM_MEDIUM = { .scale=10, .translate=0 };
+
 /** @brief RPM stored as RPM/5. E.g. 1300->260->1300
  * 
  * This limits the maximum value to 1275 RPM, but gives more precision than RPM_MEDIUM
@@ -143,7 +146,7 @@ static constexpr conversionFactor<int16_t, uint8_t> TEMPERATURE = { .scale=1U, .
  * 
  * @param temp Working temperature (-40, 215)
  */
-static inline constexpr uint8_t temperatureAddOffset(int16_t temp) {
+static constexpr uint8_t temperatureAddOffset(int16_t temp) {
     // TODO: remove this function, replace with TEMPERATURE.toRaw()
     return TEMPERATURE.toRaw(temp);
 }
@@ -155,7 +158,7 @@ static inline constexpr uint8_t temperatureAddOffset(int16_t temp) {
  * 
  * @param temp Storage temperature (0, 255)
  */
-static inline constexpr int16_t temperatureRemoveOffset(uint8_t temp) {
+static constexpr int16_t temperatureRemoveOffset(uint8_t temp) {
     // TODO: remove this function, replace with TEMPERATURE.toUser()
     return TEMPERATURE.toUser(temp);
 }

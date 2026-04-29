@@ -5,9 +5,9 @@
 #include "scheduler.h"
 #include "channel_test_helpers.h"
 
-#define TIMEOUT 1000
-#define DURATION 1000
-#define DELTA 20
+constexpr uint32_t TIMEOUT = 1000U;
+constexpr uint16_t DURATION = 1000U;
+constexpr uint32_t DELTA = ticksToMicros(6U);
 
 static uint32_t start_time, end_time;
 static void startCallback(void) { start_time = micros(); }
@@ -20,8 +20,8 @@ static void test_accuracy_duration_inj(FuelSchedule &schedule)
     setCallbacks(schedule, startCallback, endCallback);
     setFuelSchedule(schedule, TIMEOUT, DURATION);
     while(schedule.Status != OFF) /*Wait*/ ;
-    TEST_ASSERT_UINT32_WITHIN(DELTA, DURATION, end_time - start_time);
     stopFuelSchedulers();
+    TEST_ASSERT_UINT32_WITHIN(DELTA, DURATION, end_time - start_time);
 }
 
 static void test_accuracy_duration_inj1(void)
@@ -71,8 +71,8 @@ static void test_accuracy_duration_ign(IgnitionSchedule &schedule)
     setCallbacks(schedule, startCallback, endCallback);
     setIgnitionSchedule(schedule, TIMEOUT, DURATION);
     while(schedule.Status != OFF) /*Wait*/ ;
-    TEST_ASSERT_UINT32_WITHIN(DELTA, DURATION, end_time - start_time);    
     stopIgnitionSchedulers();
+    TEST_ASSERT_UINT32_WITHIN(DELTA, DURATION, end_time - start_time);
 }
 
 static void test_accuracy_duration_ign1(void)

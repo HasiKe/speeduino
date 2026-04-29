@@ -106,10 +106,10 @@ typedef uint16_t QU1X8_t;
 /** @brief Integer shift to convert to/from QU1X8_t. */
 constexpr QU1X8_t QU1X8_INTEGER_SHIFT = 8;
 
-static inline constexpr QU1X8_t toQU1X8(uint16_t base) {
+static constexpr QU1X8_t toQU1X8(uint16_t base) {
   return base << QU1X8_INTEGER_SHIFT;
 }
-static inline constexpr uint16_t fromQU1X8(QU1X8_t base) {
+static constexpr uint16_t fromQU1X8(QU1X8_t base) {
   return base >> QU1X8_INTEGER_SHIFT;
 }
 
@@ -249,7 +249,7 @@ TESTABLE_INLINE_STATIC table3d_value_t bilinear_interpolation( const table3d_val
  * @param yMultiplier The y-axis multiplier
  * @return table3d_value_t 
  */
-table3d_value_t interpolate_3d_value(const xy_values &lookUpValues, 
+table3d_value_t interpolate_3d_value(const xy_pair_t &lookUpValues, 
                     const xy_coord2d &upperBinIndices,
                     const table3d_dim_t &axisSize,
                     const table3d_value_t *pValues,

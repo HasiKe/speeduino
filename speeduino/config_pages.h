@@ -117,11 +117,6 @@ constexpr uint8_t SPARK2_CONDITION_MAP = 1U;
 constexpr uint8_t SPARK2_CONDITION_TPS = 2U;
 constexpr uint8_t SPARK2_CONDITION_ETH = 3U;
 
-constexpr uint8_t RESET_CONTROL_DISABLED             = 0U;
-constexpr uint8_t RESET_CONTROL_PREVENT_WHEN_RUNNING = 1U;
-constexpr uint8_t RESET_CONTROL_PREVENT_ALWAYS       = 2U;
-constexpr uint8_t RESET_CONTROL_SERIAL_COMMAND       = 3U;
-
 constexpr uint8_t OPEN_LOOP_BOOST     = 0U;
 constexpr uint8_t CLOSED_LOOP_BOOST   = 1U;
 
@@ -161,6 +156,11 @@ enum MAPSamplingMethod {
   MAPSamplingIgnitionEventAverage= 3,
 };
 
+// A marker struct for the config pages.
+struct config_page_t
+{  
+};
+
 /** Page 2 of the config - mostly variables that are required for fuel.
  * These are "non-live" EFI setting, engine and "system" variables that remain fixed once sent
  * (and stored to e.g. EEPROM) from configuration/tuning SW (from outside by USBserial/bluetooth).
@@ -168,7 +168,7 @@ enum MAPSamplingMethod {
  * See the ini file for further reference.
  * 
  */
-struct config2 {
+struct config2 : public config_page_t {
 
   byte aseTaperTime;
   byte aeColdPct;  //AE cold clt modifier %
@@ -346,10 +346,14 @@ static inline bool isExternalVssMode(const config2 &page2) {
   return page2.vssMode==VSS_MODE_EXTERNAL_KM
       || page2.vssMode==VSS_MODE_EXTERNAL_MI;
 }
+
+constexpr uint8_t CRANK_SPEED = 0U;
+constexpr uint8_t CAM_SPEED   = 1U;
+
 /** Page 4 of the config - variables required for ignition and rpm/crank phase /cam phase decoding.
 * See the ini file for further reference.
 */
-struct config4 {
+struct config4 : public config_page_t {
 
   int16_t triggerAngle; ///< Angle (ATDC) when tooth No:1 on the primary wheel sends signal (-360 to +360 deg.)
   int8_t FixAng; ///< Fixed Ignition angle value (enabled by @ref configPage2.fixAngEnable, copied to ignFixValue, Negative values allowed, See corrections.ino)
@@ -448,7 +452,7 @@ struct config4 {
 /** Page 6 of the config - mostly variables that are required for AFR targets and closed loop.
 See the ini file for further reference.
 */
-struct config6 {
+struct config6 : public config_page_t {
 
   byte egoAlgorithm : 2; ///< EGO Algorithm - Simple, PID, No correction
   byte egoType : 2;      ///< EGO Sensor Type 0=Disabled/None, 1=Narrowband, 2=Wideband
@@ -543,17 +547,17 @@ struct config6 {
 
 } __attribute__((packed,aligned(__alignof__(uint8_t)))); //The 32 bit systems require all structs to be fully packed, aligned to their largest member type 
 
-#define HARD_REV_FIXED    1
-#define HARD_REV_COOLANT  2
+constexpr uint8_t HARD_REV_FIXED   = 1U;
+constexpr uint8_t HARD_REV_COOLANT = 2U;
 
-#define AFR_PROTECT_OFF     0U
-#define AFR_PROTECT_FIXED   1U
-#define AFR_PROTECT_TABLE   2U
+constexpr uint8_t AFR_PROTECT_OFF   = 0U;
+constexpr uint8_t AFR_PROTECT_FIXED = 1U;
+constexpr uint8_t AFR_PROTECT_TABLE = 2U;
 
 /** Page 9 of the config - mostly deals with CANBUS control.
 See ini file for further info (Config Page 10 in the ini).
 */
-struct config9 {
+struct config9 : public config_page_t {
   byte enable_secondarySerial:1;            //enable secondary serial
   byte intcan_available:1;                     //enable internal can module
   byte enable_intcan:1;
@@ -631,7 +635,7 @@ struct config9 {
 192 bytes long.
 See ini file for further info (Config Page 11 in the ini).
 */
-struct config10 {
+struct config10 : public config_page_t {
   byte crankingEnrichBins[4]; //Bytes 0-3
   byte crankingEnrichValues[4]; //Bytes 4-7
 
@@ -812,7 +816,7 @@ struct config10 {
 /** Config for programmable I/O comparison operation (between 2 vars).
  * Operations are implemented in utilities.ino (@ref checkProgrammableIO()).
  */
-struct cmpOperation{
+struct cmpOperation {
   uint8_t firstCompType : 3;  ///< First cmp. op (COMPARATOR_* ops, see below)
   uint8_t secondCompType : 3; ///< Second cmp. op (0=COMPARATOR_EQUAL, 1=COMPARATOR_NOT_EQUAL,2=COMPARATOR_GREATER,3=COMPARATOR_GREATER_EQUAL,4=COMPARATOR_LESS,5=COMPARATOR_LESS_EQUAL,6=COMPARATOR_CHANGE)
   uint8_t bitwise : 2; ///< BITWISE_AND, BITWISE_OR, BITWISE_XOR
@@ -822,7 +826,7 @@ struct cmpOperation{
 Page 13 - Programmable outputs logic rules.
 128 bytes long. Rules implemented in utilities.ino @ref checkProgrammableIO().
 */
-struct config13 {
+struct config13 : public config_page_t {
   uint8_t outputInverted; ///< Invert (on/off) value before writing to output pin (for all programmable I/O:s).
   uint8_t kindOfLimiting; ///< Select which kind of output limiting are active (0 - minimum | 1 - maximum)
   uint8_t outputPin[8];   ///< Disable(0) or enable (set to valid pin number) Programmable Pin (output/target pin to set)
@@ -871,7 +875,7 @@ struct config13 {
 Page 15 - second page for VVT and boost control.
 256 bytes long. 
 */
-struct config15 {
+struct config15 : public config_page_t {
   byte boostControlEnable : 1; 
   byte unused15_1 : 7; //7bits unused
   byte boostDCWhenDisabled;

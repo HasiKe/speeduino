@@ -1,6 +1,7 @@
 #include "board_definition.h"
 
 #if defined(CORE_TEENSY) && defined(__IMXRT1062__)
+#include <EEPROM.h>
 #include "auxiliaries.h"
 #include "idle.h"
 #include "scheduler.h"
@@ -8,6 +9,7 @@
 #include "comms_secondary.h"
 #include <InternalTemperature.h>
 #include RTC_LIB_H
+#include "board_eeprom_adapter.hpp"
 
 static void PIT_isr();
 static void TMR1_isr(void);
@@ -74,7 +76,6 @@ void initBoard(uint32_t /*baudRate*/)
     * Timers
     */
     //Uses the PIT timer channel 4 on Teensy 4.1.
-    //lowResTimer.begin(oneMSInterval, 1000);
     PIT_TCTRL3 = 0;
     PIT_TCTRL3 |= PIT_TCTRL_TIE; // enable Timer 2 interrupts
     PIT_TCTRL3 |= PIT_TCTRL_TEN; // start Timer 2
@@ -404,5 +405,23 @@ void boardInitPins(void)
   if(configPage10.knock_mode == KNOCK_MODE_DIGITAL) { setPinHysteresis(configPage10.knock_pin); }
 }
 
+static uint16_t getEepromWriteBlockSize(const statuses &current)
+{
+  uint16_t maxWrite = 64;
+
+  // Write to EEPROM more aggressively if the engine is not running
+  if(current.RPM==0U)
+  { 
+    return maxWrite * 8U;
+  } 
+
+  return maxWrite;
+}
+
+/** @brief Get the EEPROM storage API for the board */
+storage_api_t getBoardStorageApi(void)
+{
+  return getEEPROMStorageApi(getEepromWriteBlockSize);
+}
 
 #endif

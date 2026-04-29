@@ -23,12 +23,6 @@
 extern volatile byte flexCounter;
 extern volatile uint32_t flexPulseWidth;
 
-#if defined(CORE_AVR)
-  #define READ_FLEX() ((*flex_pin_port & flex_pin_mask) ? true : false)
-#else
-  #define READ_FLEX() digitalRead(pinFlex)
-#endif
-
 #define BIT_SENSORS_AUX_ENBL        0
 #define BIT_SENSORS_BARO_SAVED      1
 #define BIT_SENSORS_UNUSED2         2
@@ -41,6 +35,7 @@ extern uint8_t statusSensors; //Uses the above status bits
 
 void initialiseADC(void);
 void flexPulse(void);
+void initialiseFlexSensor(config2 &page2, statuses &current, uint8_t pin);
 void knockPulse(void);
 uint32_t vssGetPulseGap(byte toothHistoryIndex);
 void vssPulse(void);
@@ -97,8 +92,8 @@ int16_t getMAPDelta(void);
 /** @brief Get the time in µS between the last 2 MAP readings */
 uint32_t getMAPDeltaTime(void);
 
-extern table2D_u16_u16_32 cltCalibrationTable;
-extern table2D_u16_u16_32 iatCalibrationTable;
+extern table2D_u16_u8_32 cltCalibrationTable;
+extern table2D_u16_u8_32 iatCalibrationTable;
 extern table2D_u16_u8_32 o2CalibrationTable; 
 
 #endif // SENSORS_H

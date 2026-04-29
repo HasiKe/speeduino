@@ -7,6 +7,12 @@
 #include "idle.h"
 #include "scheduler.h"
 #include "timers.h"
+#ifdef USE_SPI_EEPROM
+  #include "src/SPIAsEEPROM/SPIAsEEPROM.h"
+#else
+  #include <EEPROM.h>
+#endif
+#include "board_eeprom_adapter.hpp"
 
 // Prescaler values for timers 1-3-4-5. Refer to www.instructables.com/files/orig/F3T/TIKL/H3WSA4V7/F3TTIKLH3WSA4V7.jpg
 #define TIMER_PRESCALER_OFF  ((0<<CS12)|(0<<CS11)|(0<<CS10))
@@ -248,6 +254,41 @@ void boardInitRTC(void)
 void boardInitPins(void)
 {
   // Do nothing
+}
+
+static uint16_t getEepromWriteBlockSize(const statuses &current)
+{
+#if defined(USE_SPI_EEPROM)
+  //For use with common Winbond SPI EEPROMs Eg W25Q16JV
+  uint16_t maxWrite = 20U; //This needs tuning
+#else
+  uint16_t maxWrite = 18U;
+  if(current.commCompat) { maxWrite = 8U; } //If comms compatibility mode is on, slow the burn rate down even further
+
+  //In order to prevent missed pulses during EEPROM writes on AVR, scale the
+  //maximum write block size based on the RPM.
+  //This calculation is based on EEPROM writes taking approximately 4ms per byte
+  //(Actual value is 3.8ms, so 4ms has some safety margin) 
+  if(current.RPM > 65U) //Min RPM of 65 prevents overflow of uint8_t
+  { 
+    maxWrite = (uint16_t)(15000U / current.RPM);
+    maxWrite = constrain(maxWrite, 1U, 15U); //Any higher than this will cause comms timeouts on AVR
+  }
+#endif
+
+  // Write to EEPROM more aggressively if the engine is not running
+  if(current.RPM==0U)
+  { 
+    return maxWrite * 8U;
+  } 
+
+  return maxWrite;
+}
+
+/** @brief Get the EEPROM storage API for the board */
+storage_api_t getBoardStorageApi(void)
+{
+  return getEEPROMStorageApi(getEepromWriteBlockSize);
 }
 
 #endif //CORE_AVR

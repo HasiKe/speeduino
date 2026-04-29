@@ -3,12 +3,11 @@
 #include <unity.h>
 #include "../test_utils.h"
 #include "scheduler.h"
-#include "scheduledIO.h"
 #include "channel_test_helpers.h"
 
-#define TIMEOUT 1000
-#define DURATION 1000
-#define DELTA 24
+constexpr uint32_t TIMEOUT = 1000U;
+constexpr uint16_t DURATION = 1000U;
+constexpr uint32_t DELTA = ticksToMicros(6U);
 
 static uint32_t start_time, end_time;
 static void startCallback(void) { end_time = micros(); }
@@ -22,9 +21,9 @@ static void test_accuracy_timeout_inj(FuelSchedule &schedule)
     start_time = micros();
     setFuelSchedule(schedule, TIMEOUT, DURATION);
     while(schedule.Status == PENDING) /*Wait*/ ;
-    TEST_ASSERT_UINT32_WITHIN(DELTA, TIMEOUT, end_time - start_time);
     while(schedule.Status != OFF) /*Wait*/ ;
     stopFuelSchedulers();
+    TEST_ASSERT_UINT32_WITHIN(DELTA, TIMEOUT, end_time - start_time);
 }
 
 static void test_accuracy_timeout_inj1(void)
@@ -75,9 +74,10 @@ static void test_accuracy_timeout_ign(IgnitionSchedule &schedule)
     start_time = micros();
     setIgnitionSchedule(schedule, TIMEOUT, DURATION);
     while(schedule.Status == PENDING) /*Wait*/ ;
-    TEST_ASSERT_UINT32_WITHIN(DELTA, TIMEOUT, end_time - start_time);
     while(schedule.Status != OFF) /*Wait*/ ;
     stopIgnitionSchedulers();
+
+    TEST_ASSERT_UINT32_WITHIN(DELTA, TIMEOUT, end_time - start_time);
 }
 
 static void test_accuracy_timeout_ign1(void)

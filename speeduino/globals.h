@@ -28,7 +28,6 @@
 #include "table3d.h"
 #include "statuses.h"
 #include "config_pages.h"
-#include "port_pin.h"
 #include "atomic.h"
 
 #define CRANK_ANGLE_MAX (max(CRANK_ANGLE_MAX_IGN, CRANK_ANGLE_MAX_INJ))
@@ -36,6 +35,7 @@
 #define MICROS_PER_SEC INT32_C(1000000)
 #define MICROS_PER_MIN INT32_C(MICROS_PER_SEC*60U)
 #define MICROS_PER_HOUR INT32_C(MICROS_PER_MIN*60U)
+#define MILLI_PER_SEC INT32_C(MICROS_PER_SEC/1000)
 
 #define UINT16_HALF_RANGE     0x8000
 
@@ -58,10 +58,6 @@
 #endif
 // Some code relies on TOOTH_LOG_SIZE being uint8_t.
 static_assert(TOOTH_LOG_SIZE<UINT8_MAX, "Check all uses of TOOTH_LOG_SIZE");
-
-#define O2_CALIBRATION_PAGE   2U
-#define IAT_CALIBRATION_PAGE  1U
-#define CLT_CALIBRATION_PAGE  0U
 
 // note the sequence of these defines which reference the bits used in a byte has moved when the third trigger & engine cycle was incorporated
 #define COMPOSITE_LOG_PRI   0
@@ -142,61 +138,6 @@ extern trimTable3d trim8Table; //6x6 Fuel trim 8 map
 
 extern struct table3d4RpmLoad dwellTable; //4x4 Dwell map
 
-//These are for the direct port manipulation of the injectors, coils and aux outputs
-extern port_register_t inj1_pin_port;
-extern pin_mask_t inj1_pin_mask;
-extern port_register_t inj2_pin_port;
-extern pin_mask_t inj2_pin_mask;
-extern port_register_t inj3_pin_port;
-extern pin_mask_t inj3_pin_mask;
-extern port_register_t inj4_pin_port;
-extern pin_mask_t inj4_pin_mask;
-extern port_register_t inj5_pin_port;
-extern pin_mask_t inj5_pin_mask;
-extern port_register_t inj6_pin_port;
-extern pin_mask_t inj6_pin_mask;
-extern port_register_t inj7_pin_port;
-extern pin_mask_t inj7_pin_mask;
-extern port_register_t inj8_pin_port;
-extern pin_mask_t inj8_pin_mask;
-
-extern port_register_t ign1_pin_port;
-extern pin_mask_t ign1_pin_mask;
-extern port_register_t ign2_pin_port;
-extern pin_mask_t ign2_pin_mask;
-extern port_register_t ign3_pin_port;
-extern pin_mask_t ign3_pin_mask;
-extern port_register_t ign4_pin_port;
-extern pin_mask_t ign4_pin_mask;
-extern port_register_t ign5_pin_port;
-extern pin_mask_t ign5_pin_mask;
-extern port_register_t ign6_pin_port;
-extern pin_mask_t ign6_pin_mask;
-extern port_register_t ign7_pin_port;
-extern pin_mask_t ign7_pin_mask;
-extern port_register_t ign8_pin_port;
-extern pin_mask_t ign8_pin_mask;
-
-extern port_register_t tach_pin_port;
-extern pin_mask_t tach_pin_mask;
-extern port_register_t pump_pin_port;
-extern pin_mask_t pump_pin_mask;
-
-extern port_register_t flex_pin_port;
-extern pin_mask_t flex_pin_mask;
-
-extern port_register_t triggerPri_pin_port;
-extern pin_mask_t triggerPri_pin_mask;
-extern port_register_t triggerSec_pin_port;
-extern pin_mask_t triggerSec_pin_mask;
-extern port_register_t triggerThird_pin_port;
-extern pin_mask_t triggerThird_pin_mask;
-
-extern byte triggerInterrupt;
-extern byte triggerInterrupt2;
-extern byte triggerInterrupt3;
-
-
 extern byte fpPrimeTime; //The time (in seconds, based on currentStatus.secl) that the fuel pump started priming
 extern uint8_t softLimitTime; //The time (in 0.1 seconds, based on seclx10) that the soft limiter started
 extern volatile uint16_t mainLoopCount;
@@ -208,16 +149,6 @@ extern volatile uint8_t compositeLogHistory[TOOTH_LOG_SIZE];
 extern volatile unsigned int toothHistoryIndex;
 extern unsigned long currentLoopTime; /**< The time (in uS) that the current mainloop started */
 extern volatile uint16_t ignitionCount; /**< The count of ignition events that have taken place since the engine started */
-//The below shouldn't be needed and probably should be cleaned up, but the Atmel SAM (ARM) boards use a specific type for the trigger edge values rather than a simple byte/int
-#if defined(CORE_SAMD21)
-  extern PinStatus primaryTriggerEdge;
-  extern PinStatus secondaryTriggerEdge;
-  extern PinStatus tertiaryTriggerEdge;
-#else
-  extern byte primaryTriggerEdge;
-  extern byte secondaryTriggerEdge;
-  extern byte tertiaryTriggerEdge;
-#endif
 extern int CRANK_ANGLE_MAX_IGN;
 extern int CRANK_ANGLE_MAX_INJ;       ///< The number of crank degrees that the system track over. 360 for wasted / timed batch and 720 for sequential
 extern volatile uint32_t runSecsX10;  /**< Counter of seconds since cranking commenced (similar to runSecs) but in increments of 0.1 seconds */
@@ -226,7 +157,6 @@ extern volatile byte HWTest_INJ;      /**< Each bit in this variable represents 
 extern volatile byte HWTest_INJ_Pulsed; /**< Each bit in this variable represents one of the injector channels and it's 50% HW test status */
 extern volatile byte HWTest_IGN;      /**< Each bit in this variable represents one of the ignition channels and it's HW test status */
 extern volatile byte HWTest_IGN_Pulsed; /**< Each bit in this variable represents one of the ignition channels and it's 50% HW test status */
-extern byte resetControl; ///< resetControl needs to be here (as global) because using the config page (4) directly can prevent burning the setting
 extern volatile byte TIMER_mask;
 extern volatile byte LOOP_TIMER;
 

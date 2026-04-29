@@ -24,6 +24,7 @@ A full copy of the license may be found in the projects root directory
 #endif
 #include "units.h"
 #include "sensors.h"
+#include "resetControl.h"
 
 static byte currentPage = 1;//Not the same as the speeduino config page numbers
 bool firstCommsRequest = true; /**< The number of times the A command has been issued. This is used to track whether a reset has recently been performed on the controller */
@@ -47,6 +48,16 @@ static bool isMap(void) {
 // This minimizes RAM usage at no performance cost
 #pragma GCC optimize ("Os") 
 #endif
+
+template <typename axis_t, typename value_t, uint8_t sizeT>
+static void print2dTable(Stream &serial, axis_t (&axis)[sizeT], value_t (&values)[sizeT]) {
+  for (uint8_t x = 0U; x < sizeT; ++x)
+  {
+    serial.print(axis[x]);
+    serial.print(", ");
+    serial.println(values[x]);
+  }
+}
 
 /** Processes the incoming data on the serial buffer based on the command sent.
 Can be either data for a new command or a continuation of data for command that is already in progress:
@@ -134,13 +145,13 @@ void legacySerialCommand(void)
     case 'G': // Dumps the EEPROM values to serial
     
       //The format is 2 bytes for the overall EEPROM size, a comma and then a raw dump of the EEPROM values
-      primarySerial.write(lowByte(getEEPROMSize()));
-      primarySerial.write(highByte(getEEPROMSize()));
+      primarySerial.write(lowByte(getStorageAPI().length()));
+      primarySerial.write(highByte(getStorageAPI().length()));
       primarySerial.print(',');
 
-      for(uint16_t x = 0; x < getEEPROMSize(); x++)
+      for(uint16_t x = 0; x < getStorageAPI().length(); x++)
       {
-        primarySerial.write(EEPROMReadRaw(x));
+        primarySerial.write(getStorageAPI().read(x));
       }
       serialStatusFlag = SERIAL_INACTIVE;
       break;
@@ -153,7 +164,7 @@ void legacySerialCommand(void)
       if(primarySerial.available() >= 3)
       {
         uint16_t eepromSize = word(primarySerial.read(), primarySerial.read());
-        if(eepromSize != getEEPROMSize())
+        if(eepromSize != getStorageAPI().length())
         {
           //Client is trying to send the wrong EEPROM size. Don't let it 
           primarySerial.println(F("ERR; Incorrect EEPROM size"));
@@ -166,7 +177,7 @@ void legacySerialCommand(void)
             while( (primarySerial.available() == 0) && (!isRxTimeout()) ) { delay(1); }
             if(primarySerial.available()>0) 
             { 
-              EEPROMWriteRaw(x, primarySerial.read());
+              (void)update(getStorageAPI(), x, primarySerial.read());
             }
             else 
             {
@@ -383,7 +394,7 @@ void legacySerialCommand(void)
       break;
 
     case 'U': //User wants to reset the Arduino (probably for FW update)
-      if (resetControl != RESET_CONTROL_DISABLED)
+      if (getResetControl() != RESET_CONTROL_DISABLED)
       {
       #ifndef SMALL_FLASH_MODE
         if (serialStatusFlag == SERIAL_INACTIVE) { primarySerial.println(F("Comms halted. Next byte will reset the Arduino.")); }
@@ -454,33 +465,13 @@ void legacySerialCommand(void)
     case 'Z': //Totally non-standard testing function. Will be removed once calibration testing is completed. This function takes 1.5kb of program space! :S
     #ifndef SMALL_FLASH_MODE
       primarySerial.println(F("Coolant"));
-      for (int x = 0; x < 32; x++)
-      {
-        primarySerial.print(cltCalibrationTable.axis[x]);
-        primarySerial.print(", ");
-        primarySerial.println(cltCalibrationTable.values[x]);
-      }
+      print2dTable(primarySerial, cltCalibrationTable.axis, cltCalibrationTable.values);
       primarySerial.println(F("Inlet temp"));
-      for (int x = 0; x < 32; x++)
-      {
-        primarySerial.print(iatCalibrationTable.axis[x]);
-        primarySerial.print(", ");
-        primarySerial.println(iatCalibrationTable.values[x]);
-      }
+      print2dTable(primarySerial, iatCalibrationTable.axis, iatCalibrationTable.values);
       primarySerial.println(F("O2"));
-      for (int x = 0; x < 32; x++)
-      {
-        primarySerial.print(o2CalibrationTable.axis[x]);
-        primarySerial.print(", ");
-        primarySerial.println(o2CalibrationTable.values[x]);
-      }
+      print2dTable(primarySerial, o2CalibrationTable.axis, o2CalibrationTable.values);
       primarySerial.println(F("WUE"));
-      for (int x = 0; x < 10; x++)
-      {
-        primarySerial.print(configPage4.wueBins[x]);
-        primarySerial.print(F(", "));
-        primarySerial.println(configPage2.wueValues[x]);
-      }
+      print2dTable(primarySerial, configPage4.wueBins, configPage2.wueValues);
       primarySerial.flush();
     #endif
       break;
@@ -895,9 +886,9 @@ void sendValuesLegacy(void)
 
 namespace {
 
-  void send_raw_entity(const page_iterator_t &entity)
+  void send_raw_entity(const page_iterator_t &iter)
   {
-    primarySerial.write((byte *)entity.pData, entity.size);
+    primarySerial.write((byte *)iter.entity.pRaw, iter.entity.size);
   }
 
   inline void send_table_values(table_value_iterator it)
@@ -919,26 +910,26 @@ namespace {
     }
   }
 
-  void send_table_entity(const page_iterator_t &entity)
+  void send_table_entity(const page_iterator_t &iter)
   {
-    send_table_values(rows_begin(entity));
-    send_table_axis(x_begin(entity));
-    send_table_axis(y_begin(entity));
+    send_table_values(rows_begin(iter));
+    send_table_axis(x_begin(iter));
+    send_table_axis(y_begin(iter));
   }
 
-  void send_entity(const page_iterator_t &entity)
+  void send_entity(const page_iterator_t &iter)
   {
-    switch (entity.type)
+    switch (iter.entity.type)
     {
-    case Raw:
-      return send_raw_entity(entity);
+    case EntityType::Raw:
+      return send_raw_entity(iter);
       break;
 
-    case Table:
-      return send_table_entity(entity);
+    case EntityType::Table:
+      return send_table_entity(iter);
       break;
     
-    case NoEntity:
+    case EntityType::NoEntity:
       // No-op
       break;
 
@@ -958,12 +949,12 @@ namespace {
  */
 void sendPage(void)
 {
-  page_iterator_t entity = page_begin(currentPage);
+  page_iterator_t iter = page_begin(currentPage);
 
-  while (entity.type!=End)
+  while (iter.entity.type!=EntityType::End)
   {
-    send_entity(entity);
-    entity = advance(entity);
+    send_entity(iter);
+    iter = advance(iter);
   }
 }
 
@@ -1030,7 +1021,7 @@ namespace {
     primarySerial.println();
   }
 
-  void print_x_axis(void *pTable, table_type_t key)
+  void print_x_axis(table3d_t *pTable, TableType key)
   {
     primarySerial.print(F("    "));
 
@@ -1043,7 +1034,7 @@ namespace {
     }
   }
 
-  void serial_print_3dtable(void *pTable, table_type_t key)
+  void serial_print_3dtable(table3d_t *pTable, TableType key)
   {
     auto y_it = y_begin(pTable, key);
     auto row_it = rows_begin(pTable, key);
