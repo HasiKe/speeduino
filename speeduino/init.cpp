@@ -33,6 +33,7 @@
 #include "scheduledIO_direct_inj.h"
 #include "src/pins/pinMapping.h"
 #include "resetControl.h"
+#include "mapselection.h"
 
 #if defined(CORE_AVR)
 #pragma GCC push_options
@@ -1043,7 +1044,10 @@ void initialiseAll(void)
     /* SweepMax is stored as a byte, RPM/100. divide by 60 to convert min to sec (net 5/3).  Multiply by ignition pulses per rev.
        tachoSweepIncr is also the number of tach pulses per second */
     tachoSweepIncr = configPage2.tachoSweepMaxRPM * currentStatus.maxIgnOutputs * 5 / 3;
-   
+
+    // Check for map selection mode (TPS > 90% + clutch at startup)
+    checkMapSelection();
+
     currentStatus.initialisationComplete = true;
     digitalWrite(LED_BUILTIN, HIGH);
 
