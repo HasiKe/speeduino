@@ -8,6 +8,7 @@ A full copy of the license may be found in the projects root directory
  */
 
 #include "sensors.h"
+#include "src/hayabusa/knock_tpic8101.h"
 #include "crankMaths.h"
 #include "globals.h"
 #include "maths.h"
@@ -940,6 +941,15 @@ END_LTO_INLINE()
 
 uint8_t getAnalogKnock(void)
 {
+#if defined(HAYABUSA_ECU_R3)
+  //The TPIC8101 output is only valid while the integrator is held, so the
+  //driver samples it at the end of each knock window rather than letting the
+  //30Hz polling here catch it at an arbitrary point in the cycle.
+  if (hayabusaKnockIsAvailable())
+  {
+    return getHayabusaKnockValue();
+  }
+#endif
   uint8_t pinKnock = A15; //Default value in case the user has not selected an analog pin in TunerStudio
   if(configPage10.knock_pin >=47U)
   {

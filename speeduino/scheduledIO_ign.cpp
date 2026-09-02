@@ -4,6 +4,7 @@
 #include "timers.h"
 #include "globals.h"
 #include "src/controllers/tacho/tachoController.h"
+#include "src/hayabusa/knock_tpic8101.h"
 
 #if defined(MC33810_SUPPORT)
 static bool controlModeDirect = true;
@@ -62,6 +63,7 @@ void endCoilCharge(uint8_t channel)
     coilStopCharging_DIRECT(channel);
 #endif
     tachoOutputOff();
+    hayabusaKnockOnSpark(channel); //Opens the knock integration window. No-op on every other board.
 }
 
 void beginCoil1Charge(void) { beginCoilCharge(1U); }

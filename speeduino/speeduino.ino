@@ -38,6 +38,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "init.h"
 #include "src/controllers/progammableIO/programmableIOControl.h"
 #include "engineProtection.h"
+#include "src/hayabusa/hayabusa_r3.h"
 #include "secondaryTables.h"
 #include "comms_CAN.h"
 #include "SD_logger.h"
@@ -147,6 +148,7 @@ static void onPowerSourceSwitch(uint8_t originalBatteryVoltage, const statuses &
  */
 BEGIN_LTO_ALWAYS_INLINE(void) loop(void)
 {
+  hayabusaMainLoopAlive(); //Feeds the external watchdog. No-op on every other board.
   uint8_t originalBatteryVoltage = currentStatus.battery10;
 
       if(mainLoopCount < UINT16_MAX) { mainLoopCount++; }
@@ -235,6 +237,9 @@ BEGIN_LTO_ALWAYS_INLINE(void) loop(void)
     }
     if(BIT_CHECK(currentStatus.LOOP_TIMER, BIT_TIMER_30HZ)) //30 hertz
     {
+      //Motorcycle switches, gear position, FI lamp and O2 heater.
+      //No-op on every other board.
+      hayabusaService();
       //Most boost tends to run at about 30Hz, so placing it here ensures a new target time is fetched frequently enough
       boostControl();
       //VVT may eventually need to be synced with the cam readings (ie run once per cam rev) but for now run at 30Hz

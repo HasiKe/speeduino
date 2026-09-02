@@ -11,6 +11,7 @@ They should not be confused with Schedulers, which are for performing an action 
 Timers are typically low resolution (Compared to Schedulers), with maximum frequency currently being approximately every 10ms
 */
 #include "timers.h"
+#include "src/hayabusa/hayabusa_r3.h"
 #include "globals.h"
 #include "sensors.h"
 #include "scheduler_fuel_controller.h"
@@ -75,6 +76,7 @@ void oneMSInterval(void)
 
   applyOverDwellProtection(configPage4, currentStatus);
   tachoControl(currentStatus);
+  hayabusaServiceFast();
 
   //200Hz loop
   if(loop5ms == 5)

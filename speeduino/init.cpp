@@ -3,6 +3,7 @@
  */
 #include "globals.h"
 #include "init.h"
+#include "src/hayabusa/hayabusa_r3.h"
 #include "storage.h"
 #include "updates.h"
 #include "timers.h"
@@ -247,6 +248,9 @@ void initialiseAll(void)
     initialiseCLT();
     initialiseTPS();
     initialiseTachoControl(pinNumbers.pinTachOut, configPage2, configPage6, currentStatus);
+
+    //Board specific I/O for the Gen 1 Hayabusa ECU. No-op on every other board.
+    initHayabusaR3();
 
     currentStatus.initialisationComplete = true;
     digitalWrite(LED_BUILTIN, HIGH);
