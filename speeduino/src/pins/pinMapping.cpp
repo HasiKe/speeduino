@@ -1274,6 +1274,99 @@ static pinNumbers_t getDropBearMapping(void)
 }
 #endif
 
+#if defined(CORE_TEENSY41)
+#define HAYABUSA_R3_MAPPING
+#endif
+
+#if defined(HAYABUSA_R3_MAPPING)
+/**
+ * @brief Pin mapping for the Gen 1 Hayabusa ECU, hardware revision 3.
+ *
+ * Teensy 4.1 based board. Derived from the KiCad netlist of ECU rev 3.0
+ * (hardware/ECU, schematic sheets Drivers/Inputs/Inputs2/Outputs/Crank-and-Cam).
+ *
+ * Injectors and coils are not driven from GPIO: they are controlled over SPI by
+ * a single MC33810 (U7). The MC33810 low side drivers OUT0..OUT3 feed the
+ * injectors directly, the gate drivers GD0..GD3 run in GPGD mode and drive
+ * ISL9V5036 IGBTs (Q1..Q4) for the coils.
+ *
+ * Devices sharing the SPI bus: MC33810 (CS 10), W25Q32 flash (CS 6),
+ * ADXL343 (CS 7) and TPIC8101 knock conditioner (CS 37, via a 74AHCT125 level
+ * shifter; the same pin also gates the TPIC8101 SDO buffer onto MISO).
+ */
+static pinNumbers_t getHayabusaR3Mapping(void)
+{
+  pinNumbers_t pins;
+
+  // The injector pins are not used for output. They are set to the SPI pins so
+  // that no other function (e.g. programmable I/O) can claim them.
+  pins.setInjectorPin(0, 13); // SCLK
+  pins.setInjectorPin(1, 11); // MOSI
+  pins.setInjectorPin(2, 12); // MISO
+  pins.setInjectorPin(3, 10); // CS, MC33810
+  // Coil pins are deliberately left unset: in MC33810 mode they are never used
+  // as GPIO, and every free Teensy pin on this board has another function.
+
+  pins.pinMC33810_1_CS = 10;
+  // Only one MC33810 is fitted. Leaving CS2 unset makes the (harmless) init
+  // writes to the second device go nowhere, as no chip select is asserted.
+  pins.pinMC33810_2_CS = NOT_A_PIN;
+
+  // MC33810 "Driver ON/OFF" command layout (datasheet Table 20):
+  //   bits 0..3 = OUT0..OUT3, the low side injector drivers
+  //   bits 4..7 = GD0..GD3, the gate drivers (GPGD mode)
+  //   bits 8..11 are don't care, bits 12..15 are the command nibble (0b0011)
+  pins.mc33810InjBits[0] = 0; // INJ1 -> OUT0 -> J2.7
+  pins.mc33810InjBits[1] = 1; // INJ2 -> OUT1 -> J2.6
+  pins.mc33810InjBits[2] = 2; // INJ3 -> OUT2 -> J2.5
+  pins.mc33810InjBits[3] = 3; // INJ4 -> OUT3 -> J2.4
+  pins.mc33810IgnBits[0] = 4; // IGN1 -> GD0 -> Q2 -> J2.1
+  pins.mc33810IgnBits[1] = 5; // IGN2 -> GD1 -> Q1 -> J2.2
+  pins.mc33810IgnBits[2] = 6; // IGN3 -> GD2 -> Q3 -> J2.3
+  pins.mc33810IgnBits[3] = 7; // IGN4 -> GD3 -> Q4 -> J2.10
+
+  // Crank and cam, both via the MAX9926 VR conditioner (IC1)
+  pins.pinTrigger  = 20; // CRANK-SIG, MAX9926 COUT1
+  pins.pinTrigger2 = 21; // CAM-SIG, MAX9926 COUT2
+
+  // Analog inputs. All sensor inputs are 12k/20k divided (5V -> 3.125V) except
+  // the NTC inputs, which are pulled up by 2k49 to 3V3.
+  pins.pinMAP  = A0;  // J2.58
+  pins.pinBaro = A1;  // J2.52
+  pins.pinTPS  = A2;  // J2.49
+  pins.pinO2   = A3;  // J2.38, buffered by U10A
+  pins.pinIAT  = A4;  // J2.50
+  pins.pinCLT  = A5;  // J2.51
+  pins.pinFlex = A14; // J2.39
+  pins.pinBat  = A15; // 12V-PROT via 47k/10k
+  // A16 = gear position (J2.57) and A17 = TPIC8101 integrator output are
+  // handled by the Hayabusa specific modules, not by a standard Speeduino pin.
+
+  // Digital inputs
+  pins.pinLaunch = 33; // Clutch switch, J2.19
+  pins.pinVSS    = 35; // SPARE2-Digital, J2.60
+
+  // Outputs. The low side drivers are ZXMS6006 (IC2..IC4), the high side
+  // switches are BTF3050TE (U13, U14).
+  pins.pinFuelPump = 5;  // IC3 channel 1 -> J2.9
+  pins.pinTachOut  = 8;  // IC3 channel 2 -> J2.55
+  pins.pinFan      = 29; // IC4 channel 1 -> J2.29
+  pins.pinBoost    = 24; // U13 high side -> J2.30
+
+  // Idle is a stepper only on this board (DRV8434A, U12). There is no PWM IAC
+  // output, so pinIdle1 and pinIdle2 stay unset.
+  pins.pinStepperStep   = 30;
+  pins.pinStepperDir    = 31;
+  pins.pinStepperEnable = 32; // Drives both ENABLE and nSLEEP
+
+#ifdef USE_SPI_EEPROM
+  pins.pinSPIFlash_CS = 6; // W25Q32JVSS (U2)
+#endif
+
+  return pins;
+}
+#endif
+
 #if defined(CORE_TEENSY) || defined(UNIT_TEST)
 #define BEAR_CUB_MAPPING
 #endif
@@ -1578,6 +1671,9 @@ pinNumbers_t getPinMapping(uint8_t boardID)
 #endif
 #if defined(BEAR_CUB_MAPPING)
     case 56: return getBearCubMapping(); break;
+#endif
+#if defined(HAYABUSA_R3_MAPPING)
+    case 57: return getHayabusaR3Mapping(); break;
 #endif
 #if defined(SPECTRE_V05_MAPPING)
     case 60: return getSpectreV05Mapping(); break;

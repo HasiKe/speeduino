@@ -1,7 +1,19 @@
 #include "board_definition.h"
 
 #if defined(CORE_TEENSY) && defined(__IMXRT1062__)
-#include <EEPROM.h>
+#if defined(USE_SPI_EEPROM)
+  #include <SPI.h>
+  #include "src/SPIAsEEPROM/SPIAsEEPROM.h"
+  /* Winbond W25Q32JVSS (4MB, 4kB sectors) used as the tune store on the Gen 1
+   * Hayabusa ECU. 264 sectors hold 31 emulated EEPROM bytes each, giving 8184
+   * bytes: enough for the stock 4096 byte Speeduino layout plus the extra
+   * Hayabusa map sets. That uses the first ~1.03MB of the chip. */
+  EEPROM_Emulation_Config EmulatedEEPROMMconfig{264UL, 4096UL, 31UL, 0x00000000UL};
+  Flash_SPI_Config SPIconfig{6U, SPI};
+  SPI_EEPROM_Class EEPROM(EmulatedEEPROMMconfig, SPIconfig);
+#else
+  #include <EEPROM.h>
+#endif
 #include "src/controllers/vvt/vvtController.h"
 #include "idle.h"
 #include "timers.h"
@@ -44,6 +56,13 @@ void initBoard(uint32_t /*baudRate*/)
     * General
     */
    pSecondarySerial = &Serial2;
+   //The DropBear and the Gen 1 Hayabusa ECU break out Serial1 as the secondary
+   //serial header. This has to happen here rather than in boardInitPins(),
+   //which runs after initialiseAll() has already called secondarySerial.begin().
+   if ((configPage2.pinMapping==55U) || (configPage2.pinMapping==57U))
+   {
+     pSecondarySerial = &Serial1;
+   }
 
     /*
     Idle + Boost + VVT use the PIT timer. THIS IS ALSO USED BY THE INTERVAL TIMER THAT CALLS THE 1MS LOW RES TIMER!
@@ -402,7 +421,12 @@ void boardInitPins(uint8_t, pinNumbers_t &pins)
 
 static uint16_t getEepromWriteBlockSize(const statuses &current)
 {
+#if defined(USE_SPI_EEPROM)
+  //Writing to the SPI flash is much slower than the internal EEPROM emulation
+  uint16_t maxWrite = 20;
+#else
   uint16_t maxWrite = 64;
+#endif
 
   // Write to EEPROM more aggressively if the engine is not running
   if(current.RPM==0U)
