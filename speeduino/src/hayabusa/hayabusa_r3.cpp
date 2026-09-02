@@ -160,7 +160,10 @@ void hayabusaService(void)
   uint32_t now = millis();
 
   hayabusaStatus.inNeutral = readSwitch(PIN_NEUTRAL);
-  hayabusaStatus.clutchPulled = readSwitch(PIN_CLUTCH);
+  //The clutch is also Speeduino's launch input, so follow that polarity setting
+  hayabusaStatus.clutchPulled = (configPage6.launchHiLo > 0U)
+                              ? (digitalReadFast(PIN_CLUTCH) == HIGH)
+                              : (digitalReadFast(PIN_CLUTCH) == LOW);
   hayabusaStatus.driverFault = (digitalReadFast(PIN_DRIVER_FAULT) == LOW);
 
   //Gear position

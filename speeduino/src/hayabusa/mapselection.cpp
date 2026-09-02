@@ -109,6 +109,10 @@ void checkMapSelection(void)
 
   uint8_t selected = 0U;
   bool previousClutch = true; //Entry condition means the clutch is already in
+  //The clutch has to be released once before a hold counts as a confirmation,
+  //otherwise simply holding the entry combination for three seconds confirms
+  //map set 1 before the rider can select anything.
+  bool armed = false;
   uint32_t lastActivity = millis();
   uint32_t clutchHeldSince = millis();
 
@@ -133,7 +137,7 @@ void checkMapSelection(void)
     }
     else if (clutchNow)
     {
-      if ((millis() - clutchHeldSince) >= CONFIRM_HOLD_MS)
+      if (armed && ((millis() - clutchHeldSince) >= CONFIRM_HOLD_MS))
       {
         //Confirmed
         (void)setMapSet(selected);
@@ -145,6 +149,7 @@ void checkMapSelection(void)
     else
     {
       clutchHeldSince = millis();
+      armed = true;
     }
 
     previousClutch = clutchNow;

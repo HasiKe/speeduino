@@ -131,9 +131,13 @@ ignition on. The ECU then:
 
 - blinks the FI lamp once per map set number and drives the tacho at
   (map set) x 1000 rpm
-- steps to the next set on each clutch pull
-- confirms on a three second clutch hold
+- steps to the next set on each clutch pull, wrapping from 4 back to 1
+- confirms on a three second clutch hold, once the clutch has been released
+  at least once
 - leaves selection mode on map set 1 after ten seconds without input
+
+To stay on map set 1, either wait for the timeout or cycle all the way round
+to it and hold.
 
 The selection is not stored: the ECU always comes up on map set 1 unless the
 rider enters selection mode.
