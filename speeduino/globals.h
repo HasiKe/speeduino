@@ -56,6 +56,32 @@ extern trimTable3d trimTables[INJ_CHANNELS]; //6x6 Fuel trim maps
 
 extern struct table3d4RpmLoad dwellTable; //4x4 Dwell map
 
+#if defined(HAYABUSA_ECU_R3)
+/** @name Hayabusa multi map switching
+ *
+ * Four selectable fuel and ignition map sets, chosen at power up (see
+ * src/hayabusa/mapselection.h). Map set 2 reuses Speeduino's secondary fuel and
+ * ignition tables, so the secondary table blending is skipped while it is
+ * active. Map sets 3 and 4 get tables of their own.
+ */
+///@{
+extern struct table3d16RpmLoad fuelTable3;     //16x16 fuel map, map set 3
+extern struct table3d16RpmLoad fuelTable4;     //16x16 fuel map, map set 4
+extern struct table3d16RpmLoad ignitionTable3; //16x16 ignition map, map set 3
+extern struct table3d16RpmLoad ignitionTable4; //16x16 ignition map, map set 4
+extern struct table3d8RpmLoad boostTable3;     //8x8 boost map, map set 3
+extern struct table3d8RpmLoad boostTable4;     //8x8 boost map, map set 4
+
+/** @brief Number of selectable map sets */
+constexpr uint8_t MAX_MAP_SETS = 4U;
+
+/** @brief Select a map set. Values above the last set are clamped. */
+uint8_t setMapSet(uint8_t mapSet);
+/** @brief The active map set, 0 based. */
+uint8_t getMapSet(void);
+///@}
+#endif
+
 extern uint8_t softLimitTime; //The time (in 0.1 seconds, based on seclx10) that the soft limiter started
 extern volatile uint16_t mainLoopCount;
 extern uint16_t fixedCrankingOverride;

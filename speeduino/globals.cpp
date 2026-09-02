@@ -18,6 +18,28 @@ struct table3d8RpmLoad wmiTable; ///< 8x8 wmi map
 struct table3d6RpmLoad trimTables[INJ_CHANNELS];
 struct table3d4RpmLoad dwellTable; ///< 4x4 Dwell map
 
+#if defined(HAYABUSA_ECU_R3)
+struct table3d16RpmLoad fuelTable3;     ///< 16x16 fuel map, map set 3
+struct table3d16RpmLoad fuelTable4;     ///< 16x16 fuel map, map set 4
+struct table3d16RpmLoad ignitionTable3; ///< 16x16 ignition map, map set 3
+struct table3d16RpmLoad ignitionTable4; ///< 16x16 ignition map, map set 4
+struct table3d8RpmLoad boostTable3;     ///< 8x8 boost map, map set 3
+struct table3d8RpmLoad boostTable4;     ///< 8x8 boost map, map set 4
+
+static volatile uint8_t currentMapSet = 0U;
+
+uint8_t setMapSet(uint8_t mapSet)
+{
+  currentMapSet = (mapSet >= MAX_MAP_SETS) ? (uint8_t)(MAX_MAP_SETS - 1U) : mapSet;
+  return currentMapSet;
+}
+
+uint8_t getMapSet(void)
+{
+  return currentMapSet;
+}
+#endif
+
 //These are variables used across multiple files
 uint8_t softLimitTime = 0; //The time (in 0.1 seconds, based on seclx10) that the soft limiter started
 volatile uint16_t mainLoopCount; //Main loop counter (incremented at each main loop rev., used for maintaining currentStatus.loopsPerSecond)

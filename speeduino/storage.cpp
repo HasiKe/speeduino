@@ -95,6 +95,25 @@ constexpr uint16_t EEPROM_CONFIG8_MAP8   = 3151;
 constexpr uint16_t EEPROM_CONFIG15_MAP   = 3199;
 constexpr uint16_t EEPROM_CONFIG15_START = 3281;
 
+#if defined(HAYABUSA_ECU_R3)
+/* Hayabusa multi map tables.
+ *
+ * These live above STORAGE_END, i.e. above the region that the stock layout and
+ * the sensor calibration tables occupy, so the existing layout stays byte for
+ * byte compatible. That only fits on a board with more than 4096 bytes of
+ * storage, which is why the SPI flash tune store is required for this build.
+ * A 16x16 table needs 256 values plus 16 bytes for each axis, an 8x8 table 64
+ * plus 8 and 8. */
+constexpr uint16_t EEPROM_HAYABUSA_BASE         = (uint16_t)STORAGE_END + 1U; //4096
+constexpr uint16_t EEPROM_HAYABUSA_FUELTABLE3   = EEPROM_HAYABUSA_BASE;         //4096..4383
+constexpr uint16_t EEPROM_HAYABUSA_IGNTABLE3    = EEPROM_HAYABUSA_FUELTABLE3 + 288U; //4384..4671
+constexpr uint16_t EEPROM_HAYABUSA_FUELTABLE4   = EEPROM_HAYABUSA_IGNTABLE3 + 288U;  //4672..4959
+constexpr uint16_t EEPROM_HAYABUSA_IGNTABLE4    = EEPROM_HAYABUSA_FUELTABLE4 + 288U; //4960..5247
+constexpr uint16_t EEPROM_HAYABUSA_BOOSTTABLE3  = EEPROM_HAYABUSA_IGNTABLE4 + 288U;  //5248..5327
+constexpr uint16_t EEPROM_HAYABUSA_BOOSTTABLE4  = EEPROM_HAYABUSA_BOOSTTABLE3 + 80U; //5328..5407
+constexpr uint16_t EEPROM_HAYABUSA_END          = EEPROM_HAYABUSA_BOOSTTABLE4 + 80U;
+#endif
+
 TESTABLE_INLINE_STATIC uint16_t getSensorCalibrationAddress(SensorCalibrationTable sensor, SensorCalibrationTableElement element) {
   constexpr uint16_t EEPROM_CALIBRATION_CLT_CRC = 3674;
   constexpr uint16_t EEPROM_CALIBRATION_IAT_CRC = 3678;
@@ -206,6 +225,14 @@ TESTABLE_STATIC uint16_t getEntityStartAddress(page_iterator_t iter) {
     { &ignitionTable2, EEPROM_CONFIG14_MAP },
     { &boostTableLookupDuty, EEPROM_CONFIG15_MAP },
     { &configPage15, EEPROM_CONFIG15_START },
+#if defined(HAYABUSA_ECU_R3)
+    { &fuelTable3, EEPROM_HAYABUSA_FUELTABLE3 },
+    { &ignitionTable3, EEPROM_HAYABUSA_IGNTABLE3 },
+    { &fuelTable4, EEPROM_HAYABUSA_FUELTABLE4 },
+    { &ignitionTable4, EEPROM_HAYABUSA_IGNTABLE4 },
+    { &boostTable3, EEPROM_HAYABUSA_BOOSTTABLE3 },
+    { &boostTable4, EEPROM_HAYABUSA_BOOSTTABLE4 },
+#endif
   };
   static const constexpr entity_storage_map_t* entityMapEnd = entityMap + _countof(entityMap);
 
@@ -441,6 +468,32 @@ void savePage(uint8_t pageNum)
       writesRemaining = write_range((byte *)&configPage15, (byte *)&configPage15+sizeof(configPage15), EEPROM_CONFIG15_START, writesRemaining);
       break;
 
+#if defined(HAYABUSA_ECU_R3)
+    case fuelMap3Page:
+      writesRemaining = writeTable(fuelTable3, EEPROM_HAYABUSA_FUELTABLE3, writesRemaining);
+      break;
+
+    case ignMap3Page:
+      writesRemaining = writeTable(ignitionTable3, EEPROM_HAYABUSA_IGNTABLE3, writesRemaining);
+      break;
+
+    case fuelMap4Page:
+      writesRemaining = writeTable(fuelTable4, EEPROM_HAYABUSA_FUELTABLE4, writesRemaining);
+      break;
+
+    case ignMap4Page:
+      writesRemaining = writeTable(ignitionTable4, EEPROM_HAYABUSA_IGNTABLE4, writesRemaining);
+      break;
+
+    case boostMap3Page:
+      writesRemaining = writeTable(boostTable3, EEPROM_HAYABUSA_BOOSTTABLE3, writesRemaining);
+      break;
+
+    case boostMap4Page:
+      writesRemaining = writeTable(boostTable4, EEPROM_HAYABUSA_BOOSTTABLE4, writesRemaining);
+      break;
+#endif
+
     default:
       break;
   }
@@ -564,6 +617,17 @@ void loadAllPages(void)
   //CONFIG PAGE (15) + boost duty lookup table (LUT)
   (void)loadTable(boostTableLookupDuty, EEPROM_CONFIG15_MAP);
   (void)load_range(EEPROM_CONFIG15_START, (byte *)&configPage15, (byte *)&configPage15+sizeof(configPage15));  
+
+#if defined(HAYABUSA_ECU_R3)
+  //*********************************************************************************************************************************************************************************
+  //Hayabusa multi map tables
+  (void)loadTable(fuelTable3, EEPROM_HAYABUSA_FUELTABLE3);
+  (void)loadTable(ignitionTable3, EEPROM_HAYABUSA_IGNTABLE3);
+  (void)loadTable(fuelTable4, EEPROM_HAYABUSA_FUELTABLE4);
+  (void)loadTable(ignitionTable4, EEPROM_HAYABUSA_IGNTABLE4);
+  (void)loadTable(boostTable3, EEPROM_HAYABUSA_BOOSTTABLE3);
+  (void)loadTable(boostTable4, EEPROM_HAYABUSA_BOOSTTABLE4);
+#endif
 
   //*********************************************************************************************************************************************************************************
 }

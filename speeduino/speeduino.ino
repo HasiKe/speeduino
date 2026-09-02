@@ -80,10 +80,39 @@ void setup(void)
  * 
  * @return byte The current VE value
  */
+#if defined(HAYABUSA_ECU_R3)
+/** @brief The fuel table of the active map set. */
+static inline table3d16RpmLoad& getActiveFuelTable(void)
+{
+  switch (getMapSet())
+  {
+    case 1U:  return fuelTable2;
+    case 2U:  return fuelTable3;
+    case 3U:  return fuelTable4;
+    default:  return fuelTable;
+  }
+}
+
+/** @brief The ignition table of the active map set. */
+static inline table3d16RpmLoad& getActiveIgnitionTable(void)
+{
+  switch (getMapSet())
+  {
+    case 1U:  return ignitionTable2;
+    case 2U:  return ignitionTable3;
+    case 3U:  return ignitionTable4;
+    default:  return ignitionTable;
+  }
+}
+#else
+static inline table3d16RpmLoad& getActiveFuelTable(void) { return fuelTable; }
+static inline table3d16RpmLoad& getActiveIgnitionTable(void) { return ignitionTable; }
+#endif
+
 static inline uint8_t getVE1(void)
 {
   currentStatus.fuelLoad = getLoad(configPage2.fuelAlgorithm, currentStatus);
-  return get3DTableValue(&fuelTable, currentStatus.fuelLoad, currentStatus.RPM); //Perform lookup into fuel map for RPM vs MAP value
+  return get3DTableValue(&getActiveFuelTable(), currentStatus.fuelLoad, currentStatus.RPM); //Perform lookup into fuel map for RPM vs MAP value
 }
 
 /** Lookup the ignition advance from 3D ignition table.
@@ -94,7 +123,7 @@ static inline uint8_t getVE1(void)
 static inline int8_t getAdvance1(void)
 {
   currentStatus.ignLoad = getLoad(configPage2.ignAlgorithm, currentStatus);
-  return correctionsIgn(IGNITION_ADVANCE_LARGE.toUser(get3DTableValue(&ignitionTable, currentStatus.ignLoad, currentStatus.RPM))); //As above, but for ignition advance
+  return correctionsIgn(IGNITION_ADVANCE_LARGE.toUser(get3DTableValue(&getActiveIgnitionTable(), currentStatus.ignLoad, currentStatus.RPM))); //As above, but for ignition advance
 }
 
 static inline bool haveSwitchedToBatteryPower(uint8_t originalBatteryVoltage, const statuses &current)
@@ -409,8 +438,15 @@ BEGIN_LTO_ALWAYS_INLINE(void) loop(void)
     currentStatus.advance1 = getAdvance1();
     currentStatus.advance = currentStatus.advance1; //Set the final advance value to be advance 1 as a default. This may be changed in the section below
 
-    calculateSecondaryFuel(configPage10, fuelTable2, currentStatus);
-    calculateSecondarySpark(configPage2, configPage10, ignitionTable2, currentStatus);
+#if defined(HAYABUSA_ECU_R3)
+    //Map set 2 uses the secondary tables as its primary tables, so blending
+    //them in on top of themselves would be meaningless.
+    if (getMapSet() != 1U)
+#endif
+    {
+      calculateSecondaryFuel(configPage10, fuelTable2, currentStatus);
+      calculateSecondarySpark(configPage2, configPage10, ignitionTable2, currentStatus);
+    }
 
     //Always check for sync
     //Main loop runs within this clause

@@ -360,6 +360,26 @@ static page_map_t getPageMap(uint8_t pageNumber)
     makeEntity(&boostTableLookupDuty),
     makeEntity(&configPage15, sizeof(configPage15)),
   };
+#if defined(HAYABUSA_ECU_R3)
+  static constexpr entity_t fuel3PageMap[] PROGMEM = {
+    makeEntity(&fuelTable3),
+  };
+  static constexpr entity_t ign3PageMap[] PROGMEM = {
+    makeEntity(&ignitionTable3),
+  };
+  static constexpr entity_t fuel4PageMap[] PROGMEM = {
+    makeEntity(&fuelTable4),
+  };
+  static constexpr entity_t ign4PageMap[] PROGMEM = {
+    makeEntity(&ignitionTable4),
+  };
+  static constexpr entity_t boost3PageMap[] PROGMEM = {
+    makeEntity(&boostTable3),
+  };
+  static constexpr entity_t boost4PageMap[] PROGMEM = {
+    makeEntity(&boostTable4),
+  };
+#endif
 
   static constexpr page_map_t pageMaps[MAX_PAGE_NUM] PROGMEM = {
     { pageZeroMap, _countof(pageZeroMap) },
@@ -378,6 +398,14 @@ static page_map_t getPageMap(uint8_t pageNumber)
     { progOutsPageMap, _countof(progOutsPageMap) },    
     { ign2PageMap, _countof(ign2PageMap) },
     { boostVvt2PageMap, _countof(boostVvt2PageMap) },
+#if defined(HAYABUSA_ECU_R3)
+    { fuel3PageMap, _countof(fuel3PageMap) },
+    { ign3PageMap, _countof(ign3PageMap) },
+    { fuel4PageMap, _countof(fuel4PageMap) },
+    { ign4PageMap, _countof(ign4PageMap) },
+    { boost3PageMap, _countof(boost3PageMap) },
+    { boost4PageMap, _countof(boost4PageMap) },
+#endif
   };
 
   if (pageNumber>=MAX_PAGE_NUM)

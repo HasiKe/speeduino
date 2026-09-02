@@ -4,6 +4,7 @@
 
 #include <Arduino.h>
 #include "knock_tpic8101.h"
+#include "mapselection.h"
 #include "../../globals.h"
 #include "../../statuses.h"
 
@@ -116,6 +117,10 @@ void initHayabusaR3(void)
 
   (void)initHayabusaKnock();
 
+  //Map set selection, if the rider is holding the entry combination. Runs
+  //before the main loop starts, while the watchdog is still kicked freely.
+  checkMapSelection();
+
   initTime = millis();
 }
 
@@ -176,6 +181,15 @@ void hayabusaService(void)
       }
     }
     hayabusaStatus.gear = gear;
+  }
+
+  //Publish the gear to the rest of the firmware (boost by gear, logging, CAN).
+  //Speeduino's own gear detection derives the gear from the VSS to RPM ratio;
+  //leave that alone if the tune uses it, as this board's sensor needs
+  //calibrating before it can be trusted.
+  if (configPage2.vssMode == 0U)
+  {
+    currentStatus.gear = hayabusaStatus.gear;
   }
 
   //Tip over sensor, debounced

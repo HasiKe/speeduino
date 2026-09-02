@@ -24,8 +24,20 @@ constexpr uint8_t wmiMapPage    = 12;
 constexpr uint8_t progOutsPage  = 13;
 constexpr uint8_t ignMap2Page   = 14;
 constexpr uint8_t boostvvtPage2 = 15;
+#if defined(HAYABUSA_ECU_R3)
+// Hayabusa multi map switching: tables for map sets 3 and 4.
+constexpr uint8_t fuelMap3Page   = 16;
+constexpr uint8_t ignMap3Page    = 17;
+constexpr uint8_t fuelMap4Page   = 18;
+constexpr uint8_t ignMap4Page    = 19;
+constexpr uint8_t boostMap3Page  = 20;
+constexpr uint8_t boostMap4Page  = 21;
+constexpr uint8_t LAST_PAGE_NUM  = boostMap4Page;
+#else
+constexpr uint8_t LAST_PAGE_NUM  = boostvvtPage2;
+#endif
 constexpr uint8_t MIN_PAGE_NUM  = veSetPage;
-constexpr uint8_t MAX_PAGE_NUM  = (boostvvtPage2+1U);
+constexpr uint8_t MAX_PAGE_NUM  = (LAST_PAGE_NUM+1U);
 
 /** @name Calibration page numbers */
 ///@{
