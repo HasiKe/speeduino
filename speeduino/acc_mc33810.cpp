@@ -55,10 +55,23 @@ struct mc33810_active_guard_t
     }
 };
 
+/** @brief SPI settings for the MC33810. 6MHz is the datasheet maximum. */
+static const SPISettings mc33810SpiSettings(6000000, MSBFIRST, SPI_MODE0);
+
 uint8_t mc33810_t::sendCommand(uint16_t command)
 {
-    mc33810_active_guard_t active(*this);
-    return SPI.transfer16(command);
+    // The settings are applied per transfer rather than once at startup: on
+    // boards that share the SPI bus with other devices (SPI flash, knock
+    // conditioner, accelerometer) the bus configuration is not ours alone.
+    // Note that these calls are cheap and this runs from the scheduler ISRs.
+    SPI.beginTransaction(mc33810SpiSettings);
+    uint16_t result;
+    {
+        mc33810_active_guard_t active(*this);
+        result = SPI.transfer16(command);
+    }
+    SPI.endTransaction();
+    return (uint8_t)result;
 }
 
 static mc33810_t mc33810_1;
@@ -99,8 +112,7 @@ void __attribute__((optimize("Os"))) initMC33810(const config4 &page4, const pin
     mc33810_2.init(pins.pinMC33810_2_CS);
 
     SPI.begin();
-    //These are the SPI settings per the datasheet
-	SPI.beginTransaction(SPISettings(6000000, MSBFIRST, SPI_MODE0)); 
+    //SPI settings are applied per transfer in sendCommand(), see the note there.
 
     //Set the ignition outputs to GPGD mode
     /*

@@ -247,18 +247,27 @@ int8_t FLASH_EEPROM_BaseClass::writeFlashBytes(uint32_t address __attribute__((_
 int8_t FLASH_EEPROM_BaseClass::eraseFlashSector(uint32_t address __attribute__((__unused__)), uint32_t length __attribute__((__unused__))){return -1;}
 
 
-#if defined(ARDUINO_ARCH_STM32)
+#if defined(ARDUINO_ARCH_STM32) || defined(USE_SPI_EEPROM)
 
-SPI_EEPROM_Class::SPI_EEPROM_Class(EEPROM_Emulation_Config EmulationConfig, Flash_SPI_Config SPIConfig):FLASH_EEPROM_BaseClass(EmulationConfig)
+#if !defined(SPI_EEPROM_CLOCK_HZ)
+  //22.5MHz is the highest that could be reached on STM32. Boards that share the
+  //SPI bus with slower devices can override this with a build flag.
+  #define SPI_EEPROM_CLOCK_HZ 22500000
+#endif
+
+/* Every flash access opens and closes its own SPI transaction. On boards where
+ * the bus is shared (e.g. with an MC33810 driven from the scheduler interrupts,
+ * which needs a different clock rate) leaving the bus configured for the flash
+ * chip would corrupt the other device's transfers. */
+static const SPISettings spiFlashSettings(SPI_EEPROM_CLOCK_HZ, MSBFIRST, SPI_MODE0);
+
+SPI_EEPROM_Class::SPI_EEPROM_Class(EEPROM_Emulation_Config EmulationConfig, Flash_SPI_Config SPIConfig):FLASH_EEPROM_BaseClass(EmulationConfig), _configSPI(SPIConfig)
 {
-  _configSPI = SPIConfig;
 }
 
 byte SPI_EEPROM_Class::read(uint16_t addressEEPROM){
     //Check if emulated EEPROM is available if not yet start it first.
     if(!_EmulatedEEPROMAvailable){ 
-      SPISettings settings(22500000, MSBFIRST, SPI_MODE0); //22.5Mhz is highest it could get with this. But should be ~45Mhz :-(. 
-      _configSPI.SPIport.beginTransaction(settings);
       begin(_configSPI.SPIport, _configSPI.pinChipSelect);
     }
 
@@ -267,27 +276,38 @@ byte SPI_EEPROM_Class::read(uint16_t addressEEPROM){
 
 int8_t SPI_EEPROM_Class::begin(SPIClass &_spi, uint8_t pinSPIFlash_CS=6){
     pinMode(pinSPIFlash_CS, OUTPUT);
+    digitalWrite(pinSPIFlash_CS, HIGH);
     bool flashavailable;
+    _spi.beginTransaction(spiFlashSettings);
     flashavailable = winbondSPIFlash.begin(winbondFlashClass::partNumber::autoDetect, _spi, pinSPIFlash_CS);
+    _spi.endTransaction();
     return FLASH_EEPROM_BaseClass::initialize(flashavailable);
 }    
 
 int8_t SPI_EEPROM_Class::readFlashBytes(uint32_t address, byte *buf, uint32_t length){
+  _configSPI.SPIport.beginTransaction(spiFlashSettings);
   while(winbondSPIFlash.busy());
-  return winbondSPIFlash.read(address+_config.EEPROM_Flash_BaseAddress, buf, length);
+  int8_t result = winbondSPIFlash.read(address+_config.EEPROM_Flash_BaseAddress, buf, length);
+  _configSPI.SPIport.endTransaction();
+  return result;
 }
 
 int8_t SPI_EEPROM_Class::writeFlashBytes(uint32_t address, byte *buf, uint32_t length){
+  _configSPI.SPIport.beginTransaction(spiFlashSettings);
   winbondSPIFlash.setWriteEnable(true);
   winbondSPIFlash.writePage(address+_config.EEPROM_Flash_BaseAddress, buf, length);
   while(winbondSPIFlash.busy());
+  _configSPI.SPIport.endTransaction();
   return 0;
 }
 
 int8_t SPI_EEPROM_Class::eraseFlashSector(uint32_t address, uint32_t length){
+  (void)length;
+  _configSPI.SPIport.beginTransaction(spiFlashSettings);
   winbondSPIFlash.setWriteEnable(true);
   winbondSPIFlash.eraseSector(address+_config.EEPROM_Flash_BaseAddress);
   while(winbondSPIFlash.busy());
+  _configSPI.SPIport.endTransaction();
   return 0;
 }
 

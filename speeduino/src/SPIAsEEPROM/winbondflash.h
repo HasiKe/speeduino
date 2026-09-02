@@ -87,7 +87,21 @@ class winbondFlashSPI: public winbondFlashClass {
 private:
   uint8_t nss;
   SPIClass *spi_port;
+#if defined(SPI_FLASH_ATOMIC_TRANSFERS)
+  // Boards that share the SPI bus between this flash chip and a device driven
+  // from an interrupt (e.g. an MC33810 injector/ignition driver) must not let
+  // that interrupt start its own transfer while this chip select is asserted:
+  // the flash would see the foreign clock pulses as part of its own command.
+  // Chip select is only held low for a handful of bytes at a time (the longest
+  // burst is the address translation read), so the interrupt latency added
+  // here is in the low tens of microseconds.
+  uint32_t savedPrimask = 0U;
+#endif
   inline void select() {
+#if defined(SPI_FLASH_ATOMIC_TRANSFERS)
+    __asm__ __volatile__ ("MRS %0, primask" : "=r" (savedPrimask));
+    __asm__ __volatile__ ("cpsid i" ::);
+#endif
     digitalWrite(nss,LOW);
   }
 
@@ -98,6 +112,9 @@ private:
 
   inline void deselect() {
     digitalWrite(nss,HIGH);
+#if defined(SPI_FLASH_ATOMIC_TRANSFERS)
+    __asm__ __volatile__ ("MSR primask, %0" : : "r" (savedPrimask));
+#endif
   }
 
 public:

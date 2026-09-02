@@ -137,7 +137,10 @@ typedef struct {
 
 typedef struct {
   uint16_t pinChipSelect;
-  SPIClass SPIport;
+  //Held by reference: SPIClass is a handle onto a hardware peripheral and on
+  //some cores (e.g. Teensy 4) it is neither default constructible nor
+  //meaningfully copyable.
+  SPIClass &SPIport;
 } Flash_SPI_Config;
 
 //Base class for flash read and write. SPI and internal flash inherit from this class. 
