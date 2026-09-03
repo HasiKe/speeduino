@@ -1316,14 +1316,22 @@ static pinNumbers_t getHayabusaR3Mapping(void)
   //   bits 0..3 = OUT0..OUT3, the low side injector drivers
   //   bits 4..7 = GD0..GD3, the gate drivers (GPGD mode)
   //   bits 8..11 are don't care, bits 12..15 are the command nibble (0b0011)
-  pins.mc33810InjBits[0] = 0; // INJ1 -> OUT0 -> J2.7
-  pins.mc33810InjBits[1] = 1; // INJ2 -> OUT1 -> J2.6
-  pins.mc33810InjBits[2] = 2; // INJ3 -> OUT2 -> J2.5
-  pins.mc33810InjBits[3] = 3; // INJ4 -> OUT3 -> J2.4
-  pins.mc33810IgnBits[0] = 4; // IGN1 -> GD0 -> Q2 -> J2.1
-  pins.mc33810IgnBits[1] = 5; // IGN2 -> GD1 -> Q1 -> J2.2
-  pins.mc33810IgnBits[2] = 6; // IGN3 -> GD2 -> Q3 -> J2.3
-  pins.mc33810IgnBits[3] = 7; // IGN4 -> GD3 -> Q4 -> J2.10
+  //
+  // Channel order versus cylinder order. Speeduino fires its channels in
+  // firing sequence: channel 1 at 0 degrees, 2 at 180, 3 at 360 and 4 at 540
+  // (sequential), and Wasted COP pairs channels 1+3 and 2+4. J2 follows the
+  // stock ECU connector, where coil and injector pins are numbered by
+  // CYLINDER (J2.1/2/3/10 = coils of cylinders 1/2/3/4, J2.7/6/5/4 =
+  // injectors of cylinders 1/2/3/4). The Hayabusa fires 1-2-4-3, so channel 3
+  // has to drive cylinder 4 and channel 4 cylinder 3.
+  pins.mc33810InjBits[0] = 0; // INJ1 -> OUT0 -> J2.7  injector cylinder 1
+  pins.mc33810InjBits[1] = 1; // INJ2 -> OUT1 -> J2.6  injector cylinder 2
+  pins.mc33810InjBits[2] = 3; // INJ3 -> OUT3 -> J2.4  injector cylinder 4 (third in the firing order)
+  pins.mc33810InjBits[3] = 2; // INJ4 -> OUT2 -> J2.5  injector cylinder 3 (fourth in the firing order)
+  pins.mc33810IgnBits[0] = 4; // IGN1 -> GD0 -> Q2 -> J2.1   coil cylinder 1
+  pins.mc33810IgnBits[1] = 5; // IGN2 -> GD1 -> Q1 -> J2.2   coil cylinder 2
+  pins.mc33810IgnBits[2] = 7; // IGN3 -> GD3 -> Q4 -> J2.10  coil cylinder 4 (third in the firing order)
+  pins.mc33810IgnBits[3] = 6; // IGN4 -> GD2 -> Q3 -> J2.3   coil cylinder 3 (fourth in the firing order)
 
   // Crank and cam, both via the MAX9926 VR conditioner (IC1)
   pins.pinTrigger  = 20; // CRANK-SIG, MAX9926 COUT1

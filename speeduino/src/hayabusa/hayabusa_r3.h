@@ -24,6 +24,16 @@
 /** @brief The pin map ID that this board is selected with in TunerStudio */
 constexpr uint8_t HAYABUSA_R3_BOARD_ID = 57U;
 
+/**
+ * @brief Battery voltage at ADC full scale, in tenths of a volt.
+ *
+ * The battery sense (A15) is a 47k/10k divider from 12V-PROT into the 3.3V
+ * ADC: 3.3V * 57/10 = 18.8V at full scale. Speeduino's readBat() otherwise
+ * assumes the 24.5V full scale of the Arduino boards, which would read 14.0V
+ * as 18.2V.
+ */
+constexpr int16_t HAYABUSA_R3_BATTERY_FULL_SCALE_10 = 188;
+
 /** @brief Live state of the Hayabusa specific inputs */
 struct hayabusaStatus_t
 {

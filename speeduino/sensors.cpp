@@ -9,6 +9,7 @@ A full copy of the license may be found in the projects root directory
 
 #include "sensors.h"
 #include "src/hayabusa/knock_tpic8101.h"
+#include "src/hayabusa/hayabusa_r3.h"
 #include "crankMaths.h"
 #include "globals.h"
 #include "maths.h"
@@ -745,9 +746,14 @@ static inline void readO2(void)
 static inline void readBat(void)
 {
   // Get the current raw Battery value. Permissible values are from 0v to 24.5v (245)
+  int16_t fullScale10 = 245;
+#if defined(HAYABUSA_ECU_R3)
+  // The Gen 1 Hayabusa ECU rev 3 divides the battery by 47k/10k into a 3.3V ADC, so full scale is 18.8V
+  if (configPage2.pinMapping == HAYABUSA_R3_BOARD_ID) { fullScale10 = HAYABUSA_R3_BATTERY_FULL_SCALE_10; }
+#endif
   currentStatus.battery10 =
     clamp( 
-      LOW_PASS_FILTER((int16_t)fastMap10Bit( readAnalogSensor(pinNumbers.pinBat), 0, 245) + configPage4.batVoltCorrect, 
+      LOW_PASS_FILTER((int16_t)fastMap10Bit( readAnalogSensor(pinNumbers.pinBat), 0, fullScale10) + configPage4.batVoltCorrect, 
                       configPage4.ADCFILTER_BAT,
                       (int16_t)currentStatus.battery10),
       (int16_t)0,

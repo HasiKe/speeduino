@@ -50,8 +50,37 @@ longer matches this board.
 | A17 | TPIC8101 OUT | Knock integrator output |
 
 Injectors and coils are not GPIO. The MC33810 low side drivers OUT0..OUT3 feed
-injectors 1..4 and the gate drivers GD0..GD3, in GPGD mode, drive the
-ISL9V5036 IGBTs for coils 1..4.
+the injectors and the gate drivers GD0..GD3, in GPGD mode, drive the
+ISL9V5036 IGBTs for the coils.
+
+### Channel order and cylinder order
+
+Speeduino numbers its channels in firing sequence, not by cylinder: channel 1
+fires at 0 degrees, channel 2 at 180, channel 3 at 360 and channel 4 at 540
+(sequential), and Wasted COP pairs channels 1+3 and 2+4. J2 keeps the stock
+ECU connector layout, where the coil and injector pins are numbered by
+cylinder. The Hayabusa fires 1-2-4-3, so the board mapping routes channel 3 to
+cylinder 4 and channel 4 to cylinder 3:
+
+| Speeduino channel | Fires at | MC33810 | J2 | Cylinder |
+|---|---|---|---|---|
+| INJ1 / IGN1 | 0 | OUT0 / GD0 | J2.7 / J2.1 | 1 |
+| INJ2 / IGN2 | 180 | OUT1 / GD1 | J2.6 / J2.2 | 2 |
+| INJ3 / IGN3 | 360 | OUT3 / GD3 | J2.4 / J2.10 | 4 |
+| INJ4 / IGN4 | 540 | OUT2 / GD2 | J2.5 / J2.3 | 3 |
+
+Cylinder 1 is on the left (generator) side. With this mapping the TunerStudio
+settings are the plain ones: Sequential or Wasted COP spark, semi-sequential
+pairing "1+3 & 2+4". Earlier revisions of this branch mapped the channels by
+cylinder number, which put the spark for cylinders 3 and 4 180 degrees off.
+
+## Battery voltage
+
+`readBat()` in Speeduino assumes the Arduino boards' divider, 24.5 V at ADC
+full scale. This board divides 12V-PROT by 47k/10k into the 3.3 V ADC, so full
+scale is 18.8 V. `sensors.cpp` uses `HAYABUSA_R3_BATTERY_FULL_SCALE_10` when
+board 57 is selected; without that the display and the dwell and injector
+voltage corrections would see 14.0 V as 18.2 V.
 
 ## Shared SPI bus
 
@@ -105,6 +134,32 @@ on this board: the driver samples A17 itself, at the end of each window.
 
 **All four values are starting points and need checking against a knock trace
 on the engine before the retard is trusted.**
+
+## TunerStudio ini corrections
+
+Three definitions in `reference/speeduino.ini` were wrong for this build and
+are corrected on this branch:
+
+- `ignTrim1..8` (from upstream PR #1504) were placed on page 6 at offsets
+  41..48, on top of `airDenRates`, `boostFreq`, `vvtFreq`, `idleFreq` and the
+  launch byte. The firmware keeps them in `config13` at offset 42..49, which
+  is where the ini now puts them. Loading a tune with the old ini zeroed the
+  IAT density correction above 40 C.
+- The load axes of the map set 3 and 4 tables (`fuelLoad3Bins`, `ignLoad3Bins`,
+  `fuelLoad4Bins`, `ignLoad4Bins`, `boostLoad3Bins`, `boostLoad4Bins`) were
+  fixed kPa definitions. They now follow the fuel and ignition load algorithm
+  like the main tables, so an Alpha-N tune gets a 0..100 % TPS axis with 0.5 %
+  resolution instead of a fourfold compressed one.
+- `boostTable3` and `boostTable4` use the same 2.0 scale as `boostTable`.
+
+## Crank and cam trigger
+
+The 1999 and 2000 engines carry the early crank rotor: 8 evenly spaced teeth,
+no missing tooth, VR sensor. The cam sensor is a VR pickup with one pulse per
+cam revolution. In TunerStudio that is the "Dual Wheel" pattern with 8 primary
+teeth and "Single tooth cam"; the trigger angle has to be found with a timing
+light on the engine (the values quoted for the 24-1 rotor of the 2002-2007
+bikes do not apply). Both edges RISING for the MAX9926.
 
 ## Multi map switching
 
